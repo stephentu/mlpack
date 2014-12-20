@@ -7,8 +7,10 @@
  * for faster execution with the AugLagrangian optimizer.
  */
 #include "lrsdp_function.hpp"
+#include <mlpack/core/math/lin_alg.hpp>
 
 using namespace mlpack;
+using namespace mlpack::math;
 using namespace mlpack::optimization;
 
 LRSDPFunction::LRSDPFunction(const size_t numConstraints,
@@ -36,7 +38,7 @@ double LRSDPFunction::EvaluateConstraint(const size_t index,
 {
   arma::mat rrt = coordinates * trans(coordinates);
   if (aModes[index] == 0)
-    return trace(a[index] * rrt) - b[index];
+    return TraceDot(a[index], rrt) - b[index];
   else
   {
     double value = -b[index];
@@ -86,7 +88,7 @@ double AugLagrangianFunction<LRSDPFunction>::Evaluate(
   // Let's start with the objective: Tr(C * (R R^T)).
   // Simple, possibly slow solution.
   arma::mat rrt = coordinates * trans(coordinates);
-  double objective = trace(function.C() * rrt);
+  double objective = TraceDot(function.C(), rrt);
 
   // Now each constraint.
   for (size_t i = 0; i < function.B().n_elem; ++i)
@@ -96,7 +98,7 @@ double AugLagrangianFunction<LRSDPFunction>::Evaluate(
 
     if (function.AModes()[i] == 0)
     {
-      constraint += trace(function.A()[i] * rrt);
+      constraint += TraceDot(function.A()[i], rrt);
     }
     else
     {
@@ -134,7 +136,7 @@ void AugLagrangianFunction<LRSDPFunction>::Gradient(
 
     if (function.AModes()[i] == 0)
     {
-      constraint += trace(function.A()[i] * rrt);
+      constraint += TraceDot(function.A()[i], rrt);
     }
     else
     {
