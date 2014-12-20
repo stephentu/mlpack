@@ -76,6 +76,14 @@ void RemoveRows(const arma::mat& input,
                 const std::vector<size_t>& rowsToRemove,
                 arma::mat& output);
 
+/**
+ * Compute the Frobenius inner product of two matrices A, B: Tr(A^T B)
+ */
+inline double TraceDot(const arma::mat& a, const arma::mat& b)
+{
+  return accu(a % b);
+}
+
 }; // namespace math
 }; // namespace mlpack
 

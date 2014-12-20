@@ -185,4 +185,17 @@ BOOST_AUTO_TEST_CASE(TestRemoveRows)
   }
 }
 
+BOOST_AUTO_TEST_CASE(TestTraceDot)
+{
+  mat tmp1(5, 5), tmp2(5, 5);
+  for (int row = 0; row < 5; row++) {
+    for (int col = 0; col < 5; col++) {
+      tmp1(row, col) = row * (col + 1);
+      tmp2(row, col) = col * (row + 10);
+    }
+  }
+
+  BOOST_REQUIRE_CLOSE(TraceDot(tmp1, tmp2), trace(trans(tmp1) * tmp2), 1e-5);
+}
+
 BOOST_AUTO_TEST_SUITE_END();
