@@ -1,49 +1,44 @@
 /**
  * @file hmm_util.hpp
  * @author Ryan Curtin
- * @author Michael Fox
  *
- * Deprecated Save/load utilities for HMMs. See HMM::Save, HMM::Load.
+ * Utility to read HMM type from file.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_HMM_HMM_UTIL_HPP
-#define __MLPACK_METHODS_HMM_HMM_UTIL_HPP
+#ifndef MLPACK_METHODS_HMM_HMM_UTIL_HPP
+#define MLPACK_METHODS_HMM_HMM_UTIL_HPP
 
-#include "hmm.hpp"
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace hmm {
 
-/**
- * Save an HMM to file (deprecated).
- *
- * @tparam Distribution Distribution type of HMM.
- * @param sr SaveRestoreUtility to use.
- */
-template<typename Distribution>
-void SaveHMM(const HMM<Distribution>& hmm, util::SaveRestoreUtility& sr);
+//! HMMType, to be stored on disk.  This is of type char, which is one byte.
+//! (I'm not sure what will happen on systems where one byte is not eight bits.)
+enum HMMType : char
+{
+  DiscreteHMM = 0,
+  GaussianHMM,
+  GaussianMixtureModelHMM
+};
 
-/**
- * Load an HMM from file (deprecated).
- *
- * @tparam Distribution Distribution type of HMM.
- * @param sr SaveRestoreUtility to use.
- */
-template<typename Distribution>
-void LoadHMM(HMM<Distribution>& hmm, util::SaveRestoreUtility& sr);
+//! ActionType should implement static void Apply(HMMType&).
+template<typename ActionType, typename ExtraInfoType = void>
+void LoadHMMAndPerformAction(const std::string& modelFile,
+                             ExtraInfoType* x = NULL);
 
-/**
- * Converter for HMMs saved using older MLPACK versions.
- *
- * @tparam Distribution Distribution type of HMM.
- * @param sr SaveRestoreUtility to use.
- */
-template<typename Distribution>
-void ConvertHMM(HMM<Distribution>& hmm, const util::SaveRestoreUtility& sr);
+//! Save an HMM to a file.  The file must also encode what type of HMM is being
+//! stored.
+template<typename HMMType>
+void SaveHMM(HMMType& hmm, const std::string& modelFile);
 
-}; // namespace hmm
-}; // namespace mlpack
+} // namespace hmm
+} // namespace mlpack
 
-// Include implementation.
 #include "hmm_util_impl.hpp"
 
 #endif

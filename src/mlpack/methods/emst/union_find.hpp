@@ -6,11 +6,16 @@
  * of a graph.  Each point in the graph is initially in its own component.
  * Calling unionfind.Union(x, y) unites the components indexed by x and y.
  * unionfind.Find(x) returns the index of the component containing point x.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_EMST_UNION_FIND_HPP
-#define __MLPACK_METHODS_EMST_UNION_FIND_HPP
+#ifndef MLPACK_METHODS_EMST_UNION_FIND_HPP
+#define MLPACK_METHODS_EMST_UNION_FIND_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace emst {
@@ -93,7 +98,7 @@ class UnionFind
   }
 }; // class UnionFind
 
-}; // namespace emst
-}; // namespace mlpack
+} // namespace emst
+} // namespace mlpack
 
-#endif // __MLPACK_METHODS_EMST_UNION_FIND_HPP
+#endif // MLPACK_METHODS_EMST_UNION_FIND_HPP

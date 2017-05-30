@@ -4,11 +4,16 @@
  * @author Michael Fox
  *
  * Simple least-squares linear regression.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_LINEAR_REGRESSION_LINEAR_REGRESSION_HPP
-#define __MLPACK_METHODS_LINEAR_REGRESSION_LINEAR_REGRESSION_HPP
+#ifndef MLPACK_METHODS_LINEAR_REGRESSION_LINEAR_REGRESSION_HPP
+#define MLPACK_METHODS_LINEAR_REGRESSION_LINEAR_REGRESSION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace regression /** Regression methods. */ {
@@ -25,24 +30,44 @@ class LinearRegression
    * Creates the model.
    *
    * @param predictors X, matrix of data points to create B with.
-   * @param responses y, the measured data for each point in X
-   * @param lambda regularization constant
-   * @param intercept include intercept?
-   * @param weights observation weights
+   * @param responses y, the measured data for each point in X.
+   * @param lambda Regularization constant for ridge regression.
+   * @param intercept Whether or not to include an intercept term.
+   * @param weights Observation weights (for boosting).
    */
-  LinearRegression(const arma::mat& predictors,
-                   const arma::vec& responses,
-                   const double lambda = 0,
-                   const bool intercept = true,
-                   const arma::vec& weights = arma::vec()
-                   );
+  mlpack_deprecated LinearRegression(const arma::mat& predictors,
+                                     const arma::vec& responses,
+                                     const double lambda = 0,
+                                     const bool intercept = true,
+                                     const arma::vec& weights = arma::vec());
 
   /**
-   * Initialize the model from a file.
+   * Creates the model.
    *
-   * @param filename the name of the file to load the model from.
+   * @param predictors X, matrix of data points.
+   * @param responses y, the measured data for each point in X.
+   * @param lambda Regularization constant for ridge regression.
+   * @param intercept Whether or not to include an intercept term.
    */
-  LinearRegression(const std::string& filename);
+  LinearRegression(const arma::mat& predictors,
+                   const arma::rowvec& responses,
+                   const double lambda = 0,
+                   const bool intercept = true);
+
+  /**
+   * Creates the model with weighted learning.
+   *
+   * @param predictors X, matrix of data points.
+   * @param responses y, the measured data for each point in X.
+   * @param weights Observation weights (for boosting).
+   * @param lambda Regularization constant for ridge regression.
+   * @param intercept Whether or not to include an intercept term.
+   */
+  LinearRegression(const arma::mat& predictors,
+                   const arma::rowvec& responses,
+                   const arma::rowvec& weights,
+                   const double lambda = 0,
+                   const bool intercept = true);
 
   /**
    * Copy constructor.
@@ -52,9 +77,60 @@ class LinearRegression
   LinearRegression(const LinearRegression& linearRegression);
 
   /**
-   * Empty constructor.
+   * Empty constructor.  This gives a non-working model, so make sure Train() is
+   * called (or make sure the model parameters are set) before calling
+   * Predict()!
    */
-  LinearRegression() { }
+  LinearRegression() : lambda(0.0), intercept(true) { }
+
+  /**
+   * Train the LinearRegression model on the given data.  Careful!  This will
+   * completely ignore and overwrite the existing model.  This particular
+   * implementation does not have an incremental training algorithm.  To set the
+   * regularization parameter lambda, call Lambda() or set a different value in
+   * the constructor.
+   *
+   * @param predictors X, the matrix of data points to train the model on.
+   * @param responses y, the vector of responses to each data point.
+   * @param intercept Whether or not to fit an intercept term.
+   * @param weights Observation weights (for boosting).
+   */
+  mlpack_deprecated void Train(const arma::mat& predictors,
+                               const arma::vec& responses,
+                               const bool intercept = true,
+                               const arma::vec& weights = arma::vec());
+
+  /**
+   * Train the LinearRegression model on the given data. Careful! This will
+   * completely ignore and overwrite the existing model. This particular
+   * implementation does not have an incremental training algorithm.  To set the
+   * regularization parameter lambda, call Lambda() or set a different value in
+   * the constructor.
+   *
+   * @param predictors X, the matrix of data points to train the model on.
+   * @param responses y, the responses to the data points.
+   * @param intercept Whether or not to fit an intercept term.
+   */
+  void Train(const arma::mat& predictors,
+             const arma::rowvec& responses,
+             const bool intercept = true);
+
+  /**
+   * Train the LinearRegression model on the given data and weights. Careful!
+   * This will completely ignore and overwrite the existing model. This
+   * particular implementation does not have an incremental training algorithm.
+   * To set the regularization parameter lambda, call Lambda() or set a
+   * different value in the constructor.
+   *
+   * @param predictors X, the matrix of data points to train the model on.
+   * @param responses y, the responses to the data points.
+   * @param intercept Whether or not to fit an intercept term.
+   * @param weights Observation weights (for boosting).
+   */
+  void Train(const arma::mat& predictors,
+             const arma::rowvec& responses,
+             const arma::rowvec& weights,
+             const bool intercept = true);
 
   /**
    * Calculate y_i for each data point in points.
@@ -62,7 +138,16 @@ class LinearRegression
    * @param points the data points to calculate with.
    * @param predictions y, will contain calculated values on completion.
    */
-  void Predict(const arma::mat& points, arma::vec& predictions) const;
+  mlpack_deprecated void Predict(const arma::mat& points,
+                                 arma::vec& predictions) const;
+
+  /**
+   * Calculate y_i for each data point in points.
+   *
+   * @param points the data points to calculate with.
+   * @param predictions y, will contain calculated values on completion.
+   */
+  void Predict(const arma::mat& points, arma::rowvec& predictions) const;
 
   /**
    * Calculate the L2 squared error on the given predictors and responses using
@@ -81,8 +166,28 @@ class LinearRegression
    * @param points Matrix of predictors (X).
    * @param responses Vector of responses (y).
    */
+  mlpack_deprecated double ComputeError(const arma::mat& points,
+                                        const arma::vec& responses) const;
+
+  /**
+   * Calculate the L2 squared error on the given predictors and responses using
+   * this linear regression model. This calculation returns
+   *
+   * \f[
+   * (1 / n) * \| y - X B \|^2_2
+   * \f]
+   *
+   * where \f$ y \f$ is the responses vector, \f$ X \f$ is the matrix of
+   * predictors, and \f$ B \f$ is the parameters of the trained linear
+   * regression model.
+   *
+   * As this number decreases to 0, the linear regression fit is better.
+   *
+   * @param points Matrix of predictors (X).
+   * @param responses Transposed vector of responses (y^T).
+   */
   double ComputeError(const arma::mat& points,
-                      const arma::vec& responses) const;
+                      const arma::rowvec& responses) const;
 
   //! Return the parameters (the b vector).
   const arma::vec& Parameters() const { return parameters; }
@@ -94,8 +199,19 @@ class LinearRegression
   //! Modify the Tikhonov regularization parameter for ridge regression.
   double& Lambda() { return lambda; }
 
-  // Returns a string representation of this object.
-  std::string ToString() const;
+  //! Return whether or not an intercept term is used in the model.
+  bool Intercept() const { return intercept; }
+
+  /**
+   * Serialize the model.
+   */
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
+  {
+    ar & data::CreateNVP(parameters, "parameters");
+    ar & data::CreateNVP(lambda, "lambda");
+    ar & data::CreateNVP(intercept, "intercept");
+  }
 
  private:
   /**
@@ -103,16 +219,18 @@ class LinearRegression
    * Initialized and filled by constructor to hold the least squares solution.
    */
   arma::vec parameters;
+
   /**
    * The Tikhonov regularization parameter for ridge regression (0 for linear
    * regression).
    */
   double lambda;
+
   //! Indicates whether first parameter is intercept.
   bool intercept;
 };
 
-}; // namespace linear_regression
-}; // namespace mlpack
+} // namespace linear_regression
+} // namespace mlpack
 
-#endif // __MLPACK_METHODS_LINEAR_REGRESSCLIN_HPP
+#endif // MLPACK_METHODS_LINEAR_REGRESSION_HPP

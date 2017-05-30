@@ -4,11 +4,16 @@
  * @author Ryan Curtin
  *
  * The generic L-BFGS optimizer.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_HPP
-#define __MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_HPP
+#define MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace optimization {
@@ -38,7 +43,7 @@ class L_BFGS
    * @param function Instance of function to be optimized.
    * @param numBasis Number of memory points to be stored (default 5).
    * @param maxIterations Maximum number of iterations for the optimization
-   *     (default 0 -- may run indefinitely).
+   *     (0 means no limit and may run indefinitely).
    * @param armijoConstant Controls the accuracy of the line search routine for
    *     determining the Armijo condition.
    * @param wolfe Parameter for detecting the Wolfe condition.
@@ -51,7 +56,7 @@ class L_BFGS
    */
   L_BFGS(FunctionType& function,
          const size_t numBasis = 10, /* same default as scipy */
-         const size_t maxIterations = 0, /* run forever */
+         const size_t maxIterations = 10000, /* many but not infinite */
          const double armijoConstant = 1e-4,
          const double wolfe = 0.9,
          const double minGradientNorm = 1e-6,
@@ -89,11 +94,15 @@ class L_BFGS
    * finishing point of the algorithm, and the final objective value is
    * returned.
    *
+   * This overload will be removed in mlpack 3.0.0---you should set
+   * maxIterations in the constructor instead.
+   *
    * @param iterate Starting point (will be modified).
    * @param maxIterations Maximum number of iterations (0 specifies no limit).
    * @return Objective value of the final point.
    */
-  double Optimize(arma::mat& iterate, const size_t maxIterations);
+  mlpack_deprecated double Optimize(arma::mat& iterate,
+                                    const size_t maxIterations);
 
   //! Return the function that is being optimized.
   const FunctionType& Function() const { return function; }
@@ -144,9 +153,6 @@ class L_BFGS
   double MaxStep() const { return maxStep; }
   //! Modify the maximum line search step size.
   double& MaxStep() { return maxStep; }
-
-  // convert the obkect into a string
-  std::string ToString() const;
 
  private:
   //! Internal reference to the function we are optimizing.
@@ -256,10 +262,10 @@ class L_BFGS
                       const arma::mat& oldGradient);
 };
 
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack
 
 #include "lbfgs_impl.hpp"
 
-#endif // __MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_HPP
+#endif // MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_HPP
 

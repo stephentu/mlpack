@@ -5,11 +5,17 @@
  *
  * Utility class to fit a GMM using the EM algorithm.  Used by
  * GMM::Estimate<>().
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_GMM_EM_FIT_HPP
-#define __MLPACK_METHODS_GMM_EM_FIT_HPP
+#ifndef MLPACK_METHODS_GMM_EM_FIT_HPP
+#define MLPACK_METHODS_GMM_EM_FIT_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
+#include <mlpack/core/dists/gaussian_distribution.hpp>
 
 // Default clustering mechanism.
 #include <mlpack/methods/kmeans/kmeans.hpp>
@@ -27,7 +33,7 @@ namespace gmm {
  *
  *  - void Cluster(const arma::mat& observations,
  *                 const size_t clusters,
- *                 arma::Col<size_t>& assignments);
+ *                 arma::Row<size_t>& assignments);
  *
  * This method should create 'clusters' clusters, and return the assignment of
  * each point to a cluster.
@@ -122,6 +128,10 @@ class EMFit
   //! Modify the tolerance for the convergence of the EM algorithm.
   double& Tolerance() { return tolerance; }
 
+  //! Serialize the fitter.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int version);
+
  private:
   /**
    * Run the clusterer, and then turn the cluster assignments into Gaussians.
@@ -162,8 +172,8 @@ class EMFit
   CovarianceConstraintPolicy constraint;
 };
 
-}; // namespace gmm
-}; // namespace mlpack
+} // namespace gmm
+} // namespace mlpack
 
 // Include implementation.
 #include "em_fit_impl.hpp"

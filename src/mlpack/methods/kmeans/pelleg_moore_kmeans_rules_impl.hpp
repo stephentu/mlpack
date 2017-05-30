@@ -5,9 +5,14 @@
  * Implementation of the pruning rules and base cases necessary to perform
  * single-tree k-means clustering using the fast Pelleg-Moore k-means algorithm,
  * which has been shoehorned into the mlpack tree abstractions.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_RULES_IMPL_HPP
-#define __MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_RULES_IMPL_HPP
+#ifndef MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_RULES_IMPL_HPP
+#define MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_RULES_IMPL_HPP
 
 // In case it hasn't been included yet.
 #include "pelleg_moore_kmeans_rules.hpp"
@@ -172,7 +177,7 @@ double PellegMooreKMeansRules<MetricType, TreeType>::Rescore(
   return oldScore;
 }
 
-}; // namespace kmeans
-}; // namespace mlpack
+} // namespace kmeans
+} // namespace mlpack
 
 #endif

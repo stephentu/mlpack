@@ -3,11 +3,16 @@
  * @author Ryan Curtin
  *
  * Declaration of NCA class (Neighborhood Components Analysis).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_NCA_NCA_HPP
-#define __MLPACK_METHODS_NCA_NCA_HPP
+#ifndef MLPACK_METHODS_NCA_NCA_HPP
+#define MLPACK_METHODS_NCA_NCA_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/core/metrics/lmetric.hpp>
 #include <mlpack/core/optimizers/sgd/sgd.hpp>
 
@@ -40,7 +45,7 @@ namespace nca /** Neighborhood Components Analysis. */ {
  * @endcode
  */
 template<typename MetricType = metric::SquaredEuclideanDistance,
-         template<typename> class OptimizerType = optimization::SGD>
+         template<typename...> class OptimizerType = optimization::StandardSGD>
 class NCA
 {
  public:
@@ -58,7 +63,7 @@ class NCA
    * @param metric Instantiated metric to use.
    */
   NCA(const arma::mat& dataset,
-      const arma::Col<size_t>& labels,
+      const arma::Row<size_t>& labels,
       MetricType metric = MetricType());
 
   /**
@@ -75,7 +80,7 @@ class NCA
   //! Get the dataset reference.
   const arma::mat& Dataset() const { return dataset; }
   //! Get the labels reference.
-  const arma::Col<size_t>& Labels() const { return labels; }
+  const arma::Row<size_t>& Labels() const { return labels; }
 
   //! Get the optimizer.
   const OptimizerType<SoftmaxErrorFunction<MetricType> >& Optimizer() const
@@ -83,14 +88,11 @@ class NCA
   OptimizerType<SoftmaxErrorFunction<MetricType> >& Optimizer()
   { return optimizer; }
 
-  // Returns a string representation of this object.
-  std::string ToString() const;
-
  private:
   //! Dataset reference.
   const arma::mat& dataset;
   //! Labels reference.
-  const arma::Col<size_t>& labels;
+  const arma::Row<size_t>& labels;
 
   //! Metric to be used.
   MetricType metric;
@@ -102,8 +104,8 @@ class NCA
   OptimizerType<SoftmaxErrorFunction<MetricType> > optimizer;
 };
 
-}; // namespace nca
-}; // namespace mlpack
+} // namespace nca
+} // namespace mlpack
 
 // Include the implementation.
 #include "nca_impl.hpp"

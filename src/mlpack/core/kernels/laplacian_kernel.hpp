@@ -3,11 +3,16 @@
  * @author Ajinkya Kale <kaleajinkya@gmail.com>
  *
  * Implementation of the Laplacian kernel (LaplacianKernel).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_KERNELS_LAPLACIAN_KERNEL_HPP
-#define __MLPACK_CORE_KERNELS_LAPLACIAN_KERNEL_HPP
+#ifndef MLPACK_CORE_KERNELS_LAPLACIAN_KERNEL_HPP
+#define MLPACK_CORE_KERNELS_LAPLACIAN_KERNEL_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace kernel {
@@ -45,14 +50,15 @@ class LaplacianKernel
    * distance metric, not the Euclidean distance, but for now, the Euclidean
    * distance is used.
    *
-   * @tparam VecType Type of vector (likely arma::vec or arma::spvec).
+   * @tparam VecTypeA Type of first vector (likely arma::vec or arma::sp_vec).
+   * @tparam VecTypeB Type of second vector (arma::vec / arma::sp_vec).
    * @param a First vector.
    * @param b Second vector.
    * @return K(a, b) using the bandwidth (@f$\mu@f$) specified in the
-   *   constructor.
+   *      constructor.
    */
-  template<typename VecType>
-  double Evaluate(const VecType& a, const VecType& b) const
+  template<typename VecTypeA, typename VecTypeB>
+  double Evaluate(const VecTypeA& a, const VecTypeB& b) const
   {
     // The precalculation of gamma saves us a little computation time.
     return exp(-metric::EuclideanDistance::Evaluate(a, b) / bandwidth);
@@ -72,18 +78,29 @@ class LaplacianKernel
     return exp(-t / bandwidth);
   }
 
+  /**
+   * Evaluation of the gradient of the Laplacian kernel
+   * given the distance between two points.
+   *
+   * @param t The distance between the two points the kernel should be evaluated
+   *     on.
+   * @return K(t) using the bandwidth (@f$\mu@f$) specified in the
+   *     constructor.
+   */
+  double Gradient(const double t) const  {
+    return exp(-t / bandwidth) / -bandwidth;
+  }
+
   //! Get the bandwidth.
   double Bandwidth() const { return bandwidth; }
   //! Modify the bandwidth.
   double& Bandwidth() { return bandwidth; }
 
-  //! Return a string representation of the kernel.
-  std::string ToString() const
+  //! Serialize the kernel.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
   {
-    std::ostringstream convert;
-    convert << "LaplacianKernel [" << this << "]" << std::endl;
-    convert << "  Bandwidth: " << bandwidth << std::endl;
-    return convert.str();
+    ar & data::CreateNVP(bandwidth, "bandwidth");
   }
 
  private:
@@ -98,9 +115,11 @@ class KernelTraits<LaplacianKernel>
  public:
   //! The Laplacian kernel is normalized: K(x, x) = 1 for all x.
   static const bool IsNormalized = true;
+  //! The Laplacian kernel doesn't include a squared distance.
+  static const bool UsesSquaredDistance = false;
 };
 
-}; // namespace kernel
-}; // namespace mlpack
+} // namespace kernel
+} // namespace mlpack
 
 #endif

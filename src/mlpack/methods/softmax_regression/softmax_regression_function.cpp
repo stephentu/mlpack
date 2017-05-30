@@ -3,25 +3,29 @@
  * @author Siddharth Agrawal
  *
  * Implementation of function to be optimized for softmax regression.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
  #include "softmax_regression_function.hpp"
 
 using namespace mlpack;
 using namespace mlpack::regression;
 
-SoftmaxRegressionFunction::SoftmaxRegressionFunction(const arma::mat& data,
-                                                     const arma::vec& labels,
-                                                     const size_t inputSize,
-                                                     const size_t numClasses,
-                                                     const double lambda,
-                                                     const bool fitIntercept) :
+SoftmaxRegressionFunction::SoftmaxRegressionFunction(
+    const arma::mat& data,
+    const arma::Row<size_t>& labels,
+    const size_t numClasses,
+    const double lambda,
+    const bool fitIntercept) :
     data(data),
-    inputSize(inputSize),
     numClasses(numClasses),
     lambda(lambda),
     fitIntercept(fitIntercept)
 {
-  // Intialize the parameters to suitable values.
+  // Initialize the parameters to suitable values.
   initialPoint = InitializeWeights();
 
   // Calculate the label matrix.
@@ -35,17 +39,33 @@ SoftmaxRegressionFunction::SoftmaxRegressionFunction(const arma::mat& data,
  */
 const arma::mat SoftmaxRegressionFunction::InitializeWeights()
 {
+  return InitializeWeights(data.n_rows, numClasses, fitIntercept);
+}
+
+const arma::mat SoftmaxRegressionFunction::InitializeWeights(
+    const size_t featureSize,
+    const size_t numClasses,
+    const bool fitIntercept)
+{
+    arma::mat parameters;
+    InitializeWeights(parameters, featureSize, numClasses, fitIntercept);
+    return parameters;
+}
+
+void SoftmaxRegressionFunction::InitializeWeights(
+    arma::mat &weights,
+    const size_t featureSize,
+    const size_t numClasses,
+    const bool fitIntercept)
+{
   // Initialize values to 0.005 * r. 'r' is a matrix of random values taken from
   // a Gaussian distribution with mean zero and variance one.
   // If the fitIntercept flag is true, parameters.col(0) is the intercept.
-  arma::mat parameters;
   if (fitIntercept)
-    parameters.randn(numClasses, inputSize + 1);
+    weights.randn(numClasses, featureSize + 1);
   else
-    parameters.randn(numClasses, inputSize);
-  parameters = 0.005 * parameters;
-
-  return parameters;
+    weights.randn(numClasses, featureSize);
+  weights *= 0.005;
 }
 
 /**
@@ -53,7 +73,7 @@ const arma::mat SoftmaxRegressionFunction::InitializeWeights()
  * labels. The output is in the form of a matrix, which leads to simpler
  * calculations in the Evaluate() and Gradient() methods.
  */
-void SoftmaxRegressionFunction::GetGroundTruthMatrix(const arma::vec& labels,
+void SoftmaxRegressionFunction::GetGroundTruthMatrix(const arma::Row<size_t>& labels,
                                                      arma::sp_mat& groundTruth)
 {
   // Calculate the ground truth matrix according to the labels passed. The
@@ -69,7 +89,7 @@ void SoftmaxRegressionFunction::GetGroundTruthMatrix(const arma::vec& labels,
   // number of cumulative entries made uptil that column.
   for(size_t i = 0; i < labels.n_elem; i++)
   {
-    rowPointers(i) = labels(i, 0);
+    rowPointers(i) = labels(i);
     colPointers(i+1) = i + 1;
   }
 
@@ -87,7 +107,8 @@ void SoftmaxRegressionFunction::GetGroundTruthMatrix(const arma::vec& labels,
  * it should consider the parameters.cols(0) intercept term.
  */
 void SoftmaxRegressionFunction::GetProbabilitiesMatrix(
-    const arma::mat& parameters, arma::mat& probabilities) const
+    const arma::mat& parameters,
+    arma::mat& probabilities) const
 {
   arma::mat hypothesis;
 
@@ -100,7 +121,7 @@ void SoftmaxRegressionFunction::GetProbabilitiesMatrix(
     // Since the cost of join maybe high due to the copy of original data,
     // split the hypothesis computation to two components.
     hypothesis = arma::exp(arma::repmat(parameters.col(0), 1, data.n_cols) +
-        parameters.cols(1, parameters.n_cols - 1) * data);
+                           parameters.cols(1, parameters.n_cols - 1) * data);
   }
   else
   {
@@ -139,7 +160,7 @@ double SoftmaxRegressionFunction::Evaluate(const arma::mat& parameters) const
   double logLikelihood, weightDecay, cost;
 
   logLikelihood = arma::accu(groundTruth % arma::log(probabilities)) /
-      data.n_cols;
+                  data.n_cols;
   weightDecay = 0.5 * lambda * arma::accu(parameters % parameters);
 
   // The cost is the sum of the negative log likelihood and the regularization
@@ -172,15 +193,15 @@ void SoftmaxRegressionFunction::Gradient(const arma::mat& parameters,
     // the cost of building matrix [1; data].
     arma::mat inner = probabilities - groundTruth;
     gradient.col(0) =
-        inner * arma::ones<arma::mat>(data.n_cols, 1) / data.n_cols +
-        lambda * parameters.col(0);
+      inner * arma::ones<arma::mat>(data.n_cols, 1) / data.n_cols +
+      lambda * parameters.col(0);
     gradient.cols(1, parameters.n_cols - 1) =
-        inner * data.t() / data.n_cols +
-        lambda * parameters.cols(1, parameters.n_cols - 1);
+      inner * data.t() / data.n_cols +
+      lambda * parameters.cols(1, parameters.n_cols - 1);
   }
   else
   {
     gradient = (probabilities - groundTruth) * data.t() / data.n_cols +
-        lambda * parameters;
+               lambda * parameters;
   }
 }

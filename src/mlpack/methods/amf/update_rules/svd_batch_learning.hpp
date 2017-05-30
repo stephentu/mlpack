@@ -3,11 +3,16 @@
  * @author Sumedh Ghaisas
  *
  * SVD factorizer used in AMF (Alternating Matrix Factorization).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_AMF_UPDATE_RULES_SVD_BATCH_LEARNING_HPP
-#define __MLPACK_METHODS_AMF_UPDATE_RULES_SVD_BATCH_LEARNING_HPP
+#ifndef MLPACK_METHODS_AMF_UPDATE_RULES_SVD_BATCH_LEARNING_HPP
+#define MLPACK_METHODS_AMF_UPDATE_RULES_SVD_BATCH_LEARNING_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace amf {
@@ -159,6 +164,19 @@ class SVDBatchLearning
     H += mH;
   }
 
+  //! Serialize the SVDBatch object.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
+  {
+    using data::CreateNVP;
+    ar & CreateNVP(u, "u");
+    ar & CreateNVP(kw, "kw");
+    ar & CreateNVP(kh, "kh");
+    ar & CreateNVP(momentum, "momentum");
+    ar & CreateNVP(mW, "mW");
+    ar & CreateNVP(mH, "mH");
+  }
+
  private:
   //! Step size of the algorithm.
   double u;
@@ -203,12 +221,7 @@ inline void SVDBatchLearning::WUpdate<arma::sp_mat>(const arma::sp_mat& V,
   }
 
   if (kw != 0)
-  {
-    for (size_t i = 0; i < n; i++)
-    {
-      deltaW.row(i) -= kw * W.row(i);
-    }
-  }
+    deltaW -= kw * W;
 
   mW += u * deltaW;
   W += mW;
@@ -236,12 +249,7 @@ inline void SVDBatchLearning::HUpdate<arma::sp_mat>(const arma::sp_mat& V,
   }
 
   if (kh != 0)
-  {
-    for (size_t j = 0; j < m; j++)
-    {
-      deltaH.col(j) -= kh * H.col(j);
-    }
-  }
+    deltaH -= kh * H;
 
   mH += u * deltaH;
   H += mH;
@@ -250,4 +258,4 @@ inline void SVDBatchLearning::HUpdate<arma::sp_mat>(const arma::sp_mat& V,
 } // namespace amf
 } // namespace mlpack
 
-#endif // __MLPACK_METHODS_AMF_UPDATE_RULES_SVD_BATCH_LEARNING_HPP
+#endif // MLPACK_METHODS_AMF_UPDATE_RULES_SVD_BATCH_LEARNING_HPP

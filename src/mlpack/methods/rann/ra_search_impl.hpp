@@ -4,11 +4,16 @@
  *
  * Implementation of RASearch class to perform rank-approximate
  * all-nearest-neighbors on two specified data sets.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_RANN_RA_SEARCH_IMPL_HPP
-#define __MLPACK_METHODS_RANN_RA_SEARCH_IMPL_HPP
+#ifndef MLPACK_METHODS_RANN_RA_SEARCH_IMPL_HPP
+#define MLPACK_METHODS_RANN_RA_SEARCH_IMPL_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 #include "ra_search_rules.hpp"
 
@@ -18,168 +23,260 @@ namespace neighbor {
 namespace aux {
 
 //! Call the tree constructor that does mapping.
-template<typename TreeType>
+template<typename TreeType, typename MatType>
 TreeType* BuildTree(
-    typename TreeType::Mat& dataset,
+    MatType&& dataset,
     std::vector<size_t>& oldFromNew,
-    typename boost::enable_if_c<
-        tree::TreeTraits<TreeType>::RearrangesDataset == true, TreeType*
-    >::type = 0)
+    typename std::enable_if<
+        tree::TreeTraits<TreeType>::RearrangesDataset>::type* = 0)
 {
-  return new TreeType(dataset, oldFromNew);
+  return new TreeType(std::forward<MatType>(dataset), oldFromNew);
 }
 
 //! Call the tree constructor that does not do mapping.
-template<typename TreeType>
+template<typename TreeType, typename MatType>
 TreeType* BuildTree(
-    const typename TreeType::Mat& dataset,
+    MatType&& dataset,
     const std::vector<size_t>& /* oldFromNew */,
-    const typename boost::enable_if_c<
-        tree::TreeTraits<TreeType>::RearrangesDataset == false, TreeType*
-    >::type = 0)
+    const typename std::enable_if<
+        !tree::TreeTraits<TreeType>::RearrangesDataset>::type* = 0)
 {
-  return new TreeType(dataset);
+  return new TreeType(std::forward<MatType>(dataset));
 }
 
-}; // namespace aux
+} // namespace aux
 
 // Construct the object.
-template<typename SortPolicy, typename MetricType, typename TreeType>
-RASearch<SortPolicy, MetricType, TreeType>::
-RASearch(const typename TreeType::Mat& referenceSetIn,
-         const typename TreeType::Mat& querySetIn,
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+RASearch<SortPolicy, MetricType, MatType, TreeType>::
+RASearch(const MatType& referenceSetIn,
          const bool naive,
          const bool singleMode,
+         const double tau,
+         const double alpha,
+         const bool sampleAtLeaves,
+         const bool firstLeafExact,
+         const size_t singleSampleLimit,
          const MetricType metric) :
-    referenceSet(tree::TreeTraits<TreeType>::RearrangesDataset ? referenceCopy :
-        referenceSetIn),
-    querySet((tree::TreeTraits<TreeType>::RearrangesDataset && !singleMode) ?
-        queryCopy : querySetIn),
-    referenceTree(NULL),
-    queryTree(NULL),
+    referenceTree(naive ? NULL : aux::BuildTree<Tree>(
+        const_cast<MatType&>(referenceSetIn), oldFromNewReferences)),
+    referenceSet(naive ? &referenceSetIn : &referenceTree->Dataset()),
     treeOwner(!naive),
-    hasQuerySet(true),
+    setOwner(false),
     naive(naive),
     singleMode(!naive && singleMode), // No single mode if naive.
-    metric(metric),
-    numberOfPrunes(0)
+    tau(tau),
+    alpha(alpha),
+    sampleAtLeaves(sampleAtLeaves),
+    firstLeafExact(firstLeafExact),
+    singleSampleLimit(singleSampleLimit),
+    metric(metric)
 {
-  // We'll time tree building.
-  Timer::Start("tree_building");
-
-  if (tree::TreeTraits<TreeType>::RearrangesDataset)
-  {
-    referenceCopy = referenceSetIn;
-    if (!singleMode)
-      queryCopy = querySetIn;
-  }
-
-  // Construct as a naive object if we need to.
-  if (!naive)
-  {
-    referenceTree = aux::BuildTree<TreeType>(const_cast<typename
-        TreeType::Mat&>(referenceSet), oldFromNewReferences);
-
-    if (!singleMode)
-      queryTree = aux::BuildTree<TreeType>(const_cast<typename
-          TreeType::Mat&>(querySet), oldFromNewQueries);
-  }
-
-  // Stop the timer we started above.
-  Timer::Stop("tree_building");
+  // Nothing to do.
 }
 
-// Construct the object.
-template<typename SortPolicy, typename MetricType, typename TreeType>
-RASearch<SortPolicy, MetricType, TreeType>::
-RASearch(const typename TreeType::Mat& referenceSetIn,
+// Construct the object, taking ownership of the data matrix.
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+RASearch<SortPolicy, MetricType, MatType, TreeType>::
+RASearch(MatType&& referenceSetIn,
          const bool naive,
          const bool singleMode,
+         const double tau,
+         const double alpha,
+         const bool sampleAtLeaves,
+         const bool firstLeafExact,
+         const size_t singleSampleLimit,
          const MetricType metric) :
-    referenceSet(tree::TreeTraits<TreeType>::RearrangesDataset ? referenceCopy :
-        referenceSetIn),
-    querySet(tree::TreeTraits<TreeType>::RearrangesDataset && !singleMode ?
-        referenceCopy : referenceSetIn),
-    referenceTree(NULL),
-    queryTree(NULL),
+    referenceTree(naive ? NULL : aux::BuildTree<Tree>(
+        std::move(referenceSetIn), oldFromNewReferences)),
+    referenceSet(naive ? new MatType(std::move(referenceSetIn)) :
+        &referenceTree->Dataset()),
     treeOwner(!naive),
-    hasQuerySet(false),
+    setOwner(naive),
     naive(naive),
     singleMode(!naive && singleMode), // No single mode if naive.
-    metric(metric),
-    numberOfPrunes(0)
+    tau(tau),
+    alpha(alpha),
+    sampleAtLeaves(sampleAtLeaves),
+    firstLeafExact(firstLeafExact),
+    singleSampleLimit(singleSampleLimit),
+    metric(metric)
 {
-  // We'll time tree building.
-  Timer::Start("tree_building");
-
-  if (tree::TreeTraits<TreeType>::RearrangesDataset)
-    referenceCopy = referenceSetIn;
-
-  // Construct as a naive object if we need to.
-  if (!naive)
-    referenceTree = aux::BuildTree<TreeType>(const_cast<typename
-        TreeType::Mat&>(referenceSet), oldFromNewReferences);
-
-  // Stop the timer we started above.
-  Timer::Stop("tree_building");
+  // Nothing to do.
 }
 
 // Construct the object.
-template<typename SortPolicy, typename MetricType, typename TreeType>
-RASearch<SortPolicy, MetricType, TreeType>::
-RASearch(TreeType* referenceTree,
-         TreeType* queryTree,
-         const typename TreeType::Mat& referenceSet,
-         const typename TreeType::Mat& querySet,
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+RASearch<SortPolicy, MetricType, MatType, TreeType>::
+RASearch(Tree* referenceTree,
          const bool singleMode,
+         const double tau,
+         const double alpha,
+         const bool sampleAtLeaves,
+         const bool firstLeafExact,
+         const size_t singleSampleLimit,
          const MetricType metric) :
-    referenceSet(referenceSet),
-    querySet(querySet),
     referenceTree(referenceTree),
-    queryTree(queryTree),
+    referenceSet(&referenceTree->Dataset()),
     treeOwner(false),
-    hasQuerySet(true),
+    setOwner(false),
     naive(false),
     singleMode(singleMode),
-    metric(metric),
-    numberOfPrunes(0)
+    tau(tau),
+    alpha(alpha),
+    sampleAtLeaves(sampleAtLeaves),
+    firstLeafExact(firstLeafExact),
+    singleSampleLimit(singleSampleLimit),
+    metric(metric)
 // Nothing else to initialize.
 {  }
 
-// Construct the object.
-template<typename SortPolicy, typename MetricType, typename TreeType>
-RASearch<SortPolicy, MetricType, TreeType>::
-RASearch(TreeType* referenceTree,
-         const typename TreeType::Mat& referenceSet,
+// Empty constructor.
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+RASearch<SortPolicy, MetricType, MatType, TreeType>::
+RASearch(const bool naive,
          const bool singleMode,
+         const double tau,
+         const double alpha,
+         const bool sampleAtLeaves,
+         const bool firstLeafExact,
+         const size_t singleSampleLimit,
          const MetricType metric) :
-    referenceSet(referenceSet),
-    querySet(referenceSet),
-    referenceTree(referenceTree),
-    queryTree(NULL),
+    referenceTree(NULL),
+    referenceSet(new MatType()),
     treeOwner(false),
-    hasQuerySet(false),
-    naive(false),
+    setOwner(true),
+    naive(naive),
     singleMode(singleMode),
-    metric(metric),
-    numberOfPrunes(0)
-// Nothing else to initialize.
-{ }
+    tau(tau),
+    alpha(alpha),
+    sampleAtLeaves(sampleAtLeaves),
+    firstLeafExact(firstLeafExact),
+    singleSampleLimit(singleSampleLimit),
+    metric(metric)
+{
+  // Build the tree on the empty dataset, if necessary.
+  if (!naive)
+  {
+    referenceTree = aux::BuildTree<Tree>(*referenceSet, oldFromNewReferences);
+    treeOwner = true;
+  }
+}
 
 /**
- * The tree is the only member we may be responsible for deleting.  The others
- * will take care of themselves.
+ * The tree and the dataset are the only members we may be responsible for
+ * deleting.  The others will take care of themselves.
  */
-template<typename SortPolicy, typename MetricType, typename TreeType>
-RASearch<SortPolicy, MetricType, TreeType>::
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+RASearch<SortPolicy, MetricType, MatType, TreeType>::
 ~RASearch()
 {
-  if (treeOwner)
+  if (treeOwner && referenceTree)
+    delete referenceTree;
+  if (setOwner)
+    delete referenceSet;
+}
+
+// Train on a new reference set.
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+void RASearch<SortPolicy, MetricType, MatType, TreeType>::Train(
+    const MatType& referenceSet)
+{
+  // Clean up the old tree, if we built one.
+  if (treeOwner && referenceTree)
+    delete referenceTree;
+
+  // We may need to rebuild the tree.
+  if (!naive)
   {
-    if (referenceTree)
-      delete referenceTree;
-   if (queryTree)
-      delete queryTree;
+    referenceTree = aux::BuildTree<Tree>(referenceSet, oldFromNewReferences);
+    treeOwner = true;
+  }
+  else
+  {
+    treeOwner = false;
+  }
+
+  // Delete the old reference set, if we owned it.
+  if (setOwner && this->referenceSet)
+    delete this->referenceSet;
+
+  if (!naive)
+    this->referenceSet = &referenceTree->Dataset();
+  else
+    this->referenceSet = &referenceSet;
+  setOwner = false; // We don't own the set in either case.
+}
+
+// Train on a new reference set.
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+void RASearch<SortPolicy, MetricType, MatType, TreeType>::Train(
+    MatType&& referenceSet)
+{
+  // Clean up the old tree, if we built one.
+  if (treeOwner && referenceTree)
+    delete referenceTree;
+
+  // We may need to rebuild the tree.
+  if (!naive)
+  {
+    referenceTree = aux::BuildTree<Tree>(std::move(referenceSet),
+        oldFromNewReferences);
+    treeOwner = true;
+  }
+  else
+  {
+    treeOwner = false;
+  }
+
+  // Delete the old reference set, if we owned it.
+  if (setOwner && this->referenceSet)
+    delete this->referenceSet;
+
+  if (!naive)
+  {
+    this->referenceSet = &referenceTree->Dataset();
+    setOwner = false;
+  }
+  else
+  {
+    this->referenceSet = new MatType(std::move(referenceSet));
+    setOwner = true;
   }
 }
 
@@ -187,59 +284,69 @@ RASearch<SortPolicy, MetricType, TreeType>::
  * Computes the best neighbors and stores them in resultingNeighbors and
  * distances.
  */
-template<typename SortPolicy, typename MetricType, typename TreeType>
-void RASearch<SortPolicy, MetricType, TreeType>::
-Search(const size_t k,
-       arma::Mat<size_t>& resultingNeighbors,
-       arma::mat& distances,
-       const double tau,
-       const double alpha,
-       const bool sampleAtLeaves,
-       const bool firstLeafExact,
-       const size_t singleSampleLimit)
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+void RASearch<SortPolicy, MetricType, MatType, TreeType>::
+Search(const MatType& querySet,
+       const size_t k,
+       arma::Mat<size_t>& neighbors,
+       arma::mat& distances)
 {
+  if (k > referenceSet->n_cols)
+  {
+    std::stringstream ss;
+    ss << "requested value of k (" << k << ") is greater than the number of "
+        << "points in the reference set (" << referenceSet->n_cols << ")";
+    throw std::invalid_argument(ss.str());
+  }
+
   Timer::Start("computing_neighbors");
+
+  // This will hold mappings for query points, if necessary.
+  std::vector<size_t> oldFromNewQueries;
 
   // If we have built the trees ourselves, then we will have to map all the
   // indices back to their original indices when this computation is finished.
   // To avoid an extra copy, we will store the neighbors and distances in a
   // separate matrix.
-  arma::Mat<size_t>* neighborPtr = &resultingNeighbors;
+  arma::Mat<size_t>* neighborPtr = &neighbors;
   arma::mat* distancePtr = &distances;
 
   // Mapping is only required if this tree type rearranges points and we are not
   // in naive mode.
-  if (tree::TreeTraits<TreeType>::RearrangesDataset)
+  if (tree::TreeTraits<Tree>::RearrangesDataset)
   {
-    if (treeOwner && !(singleMode && hasQuerySet))
+    if (!singleMode && !naive)
+    {
       distancePtr = new arma::mat; // Query indices need to be mapped.
-    if (treeOwner)
+      neighborPtr = new arma::Mat<size_t>;
+    }
+
+    else if (treeOwner)
       neighborPtr = new arma::Mat<size_t>; // All indices need mapping.
   }
 
   // Set the size of the neighbor and distance matrices.
   neighborPtr->set_size(k, querySet.n_cols);
   distancePtr->set_size(k, querySet.n_cols);
-  distancePtr->fill(SortPolicy::WorstDistance());
 
-  size_t numPrunes = 0;
+  typedef RASearchRules<SortPolicy, MetricType, Tree> RuleType;
 
   if (naive)
   {
-    // We don't need to run the base case on every possible combination of
-    // points; we can achieve the rank approximation guarantee with probability
-    // alpha by sampling the reference set.
-    typedef RASearchRules<SortPolicy, MetricType, TreeType> RuleType;
-    RuleType rules(referenceSet, querySet, *neighborPtr, *distancePtr,
-                   metric, tau, alpha, naive, sampleAtLeaves, firstLeafExact,
-                   singleSampleLimit);
+    RuleType rules(*referenceSet, querySet, k, metric, tau, alpha, naive,
+        sampleAtLeaves, firstLeafExact, singleSampleLimit, false);
 
     // Find how many samples from the reference set we need and sample uniformly
     // from the reference set without replacement.
-    const size_t numSamples = rules.MinimumSamplesReqd(referenceSet.n_cols, k,
-        tau, alpha);
+    const size_t numSamples = RAUtil::MinimumSamplesReqd(referenceSet->n_cols,
+        k, tau, alpha);
     arma::uvec distinctSamples;
-    rules.ObtainDistinctSamples(numSamples, referenceSet.n_cols,
+    math::ObtainDistinctSamples(0, referenceSet->n_cols, numSamples,
         distinctSamples);
 
     // Run the base case on each combination of query point and sampled
@@ -247,15 +354,13 @@ Search(const size_t k,
     for (size_t i = 0; i < querySet.n_cols; ++i)
       for (size_t j = 0; j < distinctSamples.n_elem; ++j)
         rules.BaseCase(i, (size_t) distinctSamples[j]);
+
+    rules.GetResults(*neighborPtr, *distancePtr);
   }
   else if (singleMode)
   {
-    // Create the helper object for the tree traversal.  Initialization of
-    // RASearchRules already implicitly performs the naive tree traversal.
-    typedef RASearchRules<SortPolicy, MetricType, TreeType> RuleType;
-    RuleType rules(referenceSet, querySet, *neighborPtr, *distancePtr,
-                   metric, tau, alpha, naive, sampleAtLeaves, firstLeafExact,
-                   singleSampleLimit);
+    RuleType rules(*referenceSet, querySet, k, metric, tau, alpha, naive,
+        sampleAtLeaves, firstLeafExact, singleSampleLimit, false);
 
     // If the reference root node is a leaf, then the sampling has already been
     // done in the RASearchRules constructor.  This happens when naive = true.
@@ -264,166 +369,358 @@ Search(const size_t k,
       Log::Info << "Performing single-tree traversal..." << std::endl;
 
       // Create the traverser.
-      typename TreeType::template SingleTreeTraverser<RuleType>
-        traverser(rules);
+      typename Tree::template SingleTreeTraverser<RuleType> traverser(rules);
 
       // Now have it traverse for each point.
       for (size_t i = 0; i < querySet.n_cols; ++i)
         traverser.Traverse(i, *referenceTree);
-
-      numPrunes = traverser.NumPrunes();
 
       Log::Info << "Single-tree traversal complete." << std::endl;
       Log::Info << "Average number of distance calculations per query point: "
           << (rules.NumDistComputations() / querySet.n_cols) << "."
           << std::endl;
     }
+
+    rules.GetResults(*neighborPtr, *distancePtr);
   }
   else // Dual-tree recursion.
   {
     Log::Info << "Performing dual-tree traversal..." << std::endl;
 
-    typedef RASearchRules<SortPolicy, MetricType, TreeType> RuleType;
-    RuleType rules(referenceSet, querySet, *neighborPtr, *distancePtr,
-                   metric, tau, alpha, sampleAtLeaves, firstLeafExact,
-                   singleSampleLimit);
+    // Build the query tree.
+    Timer::Stop("computing_neighbors");
+    Timer::Start("tree_building");
+    Tree* queryTree = aux::BuildTree<Tree>(const_cast<MatType&>(querySet),
+        oldFromNewQueries);
+    Timer::Stop("tree_building");
+    Timer::Start("computing_neighbors");
 
-    typename TreeType::template DualTreeTraverser<RuleType> traverser(rules);
+    RuleType rules(*referenceSet, queryTree->Dataset(), k, metric, tau, alpha,
+        naive, sampleAtLeaves, firstLeafExact, singleSampleLimit, false);
+    typename Tree::template DualTreeTraverser<RuleType> traverser(rules);
 
-    if (queryTree)
-    {
-      Log::Info << "Query statistic pre-search: "
-          << queryTree->Stat().NumSamplesMade() << std::endl;
-      traverser.Traverse(*queryTree, *referenceTree);
-    }
-    else
-    {
-      Log::Info << "Query statistic pre-search: "
-          << referenceTree->Stat().NumSamplesMade() << std::endl;
-      traverser.Traverse(*referenceTree, *referenceTree);
-    }
+    Log::Info << "Query statistic pre-search: "
+        << queryTree->Stat().NumSamplesMade() << std::endl;
 
-    numPrunes = traverser.NumPrunes();
+    traverser.Traverse(*queryTree, *referenceTree);
 
     Log::Info << "Dual-tree traversal complete." << std::endl;
     Log::Info << "Average number of distance calculations per query point: "
         << (rules.NumDistComputations() / querySet.n_cols) << "." << std::endl;
+
+    rules.GetResults(*neighborPtr, *distancePtr);
+
+    delete queryTree;
   }
 
   Timer::Stop("computing_neighbors");
-  Log::Info << "Pruned " << numPrunes << " nodes." << std::endl;
 
-  // Now, do we need to do mapping of indices?
-  if (!treeOwner || !tree::TreeTraits<TreeType>::RearrangesDataset)
+  // Map points back to original indices, if necessary.
+  if (tree::TreeTraits<Tree>::RearrangesDataset)
   {
-    // No mapping needed.  We are done.
-    return;
-  }
-  else if (treeOwner && hasQuerySet && !singleMode) // Map both sets.
-  {
-    // Set size of output matrices correctly.
-    resultingNeighbors.set_size(k, querySet.n_cols);
-    distances.set_size(k, querySet.n_cols);
-
-    for (size_t i = 0; i < distances.n_cols; i++)
+    if (!singleMode && !naive && treeOwner)
     {
-      // Map distances (copy a column).
-      distances.col(oldFromNewQueries[i]) = distancePtr->col(i);
+      // We must map both query and reference indices.
+      neighbors.set_size(k, querySet.n_cols);
+      distances.set_size(k, querySet.n_cols);
+
+      for (size_t i = 0; i < distances.n_cols; i++)
+      {
+        // Map distances (copy a column).
+        distances.col(oldFromNewQueries[i]) = distancePtr->col(i);
+
+        // Map indices of neighbors.
+        for (size_t j = 0; j < distances.n_rows; j++)
+        {
+          neighbors(j, oldFromNewQueries[i]) =
+              oldFromNewReferences[(*neighborPtr)(j, i)];
+        }
+      }
+
+      // Finished with temporary matrices.
+      delete neighborPtr;
+      delete distancePtr;
+    }
+    else if (!singleMode && !naive)
+    {
+      // We must map query indices only.
+      neighbors.set_size(k, querySet.n_cols);
+      distances.set_size(k, querySet.n_cols);
+
+      for (size_t i = 0; i < distances.n_cols; ++i)
+      {
+        // Map distances (copy a column).
+        const size_t queryMapping = oldFromNewQueries[i];
+        distances.col(queryMapping) = distancePtr->col(i);
+        neighbors.col(queryMapping) = neighborPtr->col(i);
+      }
+
+      // Finished with temporary matrices.
+      delete neighborPtr;
+      delete distancePtr;
+    }
+    else if (treeOwner)
+    {
+      // We must map reference indices only.
+      neighbors.set_size(k, querySet.n_cols);
 
       // Map indices of neighbors.
-      for (size_t j = 0; j < distances.n_rows; j++)
-      {
-        resultingNeighbors(j, oldFromNewQueries[i]) =
-            oldFromNewReferences[(*neighborPtr)(j, i)];
-      }
+      for (size_t i = 0; i < neighbors.n_cols; i++)
+        for (size_t j = 0; j < neighbors.n_rows; j++)
+          neighbors(j, i) = oldFromNewReferences[(*neighborPtr)(j, i)];
+
+      // Finished with temporary matrix.
+      delete neighborPtr;
+    }
+  }
+}
+
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+void RASearch<SortPolicy, MetricType, MatType, TreeType>::Search(
+    Tree* queryTree,
+    const size_t k,
+    arma::Mat<size_t>& neighbors,
+    arma::mat& distances)
+{
+  Timer::Start("computing_neighbors");
+
+  // Get a reference to the query set.
+  const MatType& querySet = queryTree->Dataset();
+
+  // Make sure we are in dual-tree mode.
+  if (singleMode || naive)
+    throw std::invalid_argument("cannot call NeighborSearch::Search() with a "
+        "query tree when naive or singleMode are set to true");
+
+  // We won't need to map query indices, but will we need to map distances?
+  arma::Mat<size_t>* neighborPtr = &neighbors;
+
+  if (treeOwner && tree::TreeTraits<Tree>::RearrangesDataset)
+    neighborPtr = new arma::Mat<size_t>;
+
+  neighborPtr->set_size(k, querySet.n_cols);
+  distances.set_size(k, querySet.n_cols);
+
+  // Create the helper object for the tree traversal.
+  typedef RASearchRules<SortPolicy, MetricType, Tree> RuleType;
+  RuleType rules(*referenceSet, queryTree->Dataset(), k, metric, tau, alpha,
+      naive, sampleAtLeaves, firstLeafExact, singleSampleLimit, false);
+
+  // Create the traverser.
+  typename Tree::template DualTreeTraverser<RuleType> traverser(rules);
+  traverser.Traverse(*queryTree, *referenceTree);
+
+  rules.GetResults(*neighborPtr, distances);
+
+  Timer::Stop("computing_neighbors");
+
+  // Do we need to map indices?
+  if (treeOwner && tree::TreeTraits<Tree>::RearrangesDataset)
+  {
+    // We must map reference indices only.
+    neighbors.set_size(k, querySet.n_cols);
+
+    // Map indices of neighbors.
+    for (size_t i = 0; i < neighbors.n_cols; i++)
+      for (size_t j = 0; j < neighbors.n_rows; j++)
+        neighbors(j, i) = oldFromNewReferences[(*neighborPtr)(j, i)];
+
+    // Finished with temporary matrix.
+    delete neighborPtr;
+  }
+}
+
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+void RASearch<SortPolicy, MetricType, MatType, TreeType>::Search(
+    const size_t k,
+    arma::Mat<size_t>& neighbors,
+    arma::mat& distances)
+{
+  Timer::Start("computing_neighbors");
+
+  arma::Mat<size_t>* neighborPtr = &neighbors;
+  arma::mat* distancePtr = &distances;
+
+  if (tree::TreeTraits<Tree>::RearrangesDataset && treeOwner)
+  {
+    // We will always need to rearrange in this case.
+    distancePtr = new arma::mat;
+    neighborPtr = new arma::Mat<size_t>;
+  }
+
+  // Initialize results.
+  neighborPtr->set_size(k, referenceSet->n_cols);
+  distancePtr->set_size(k, referenceSet->n_cols);
+
+  // Create the helper object for the tree traversal.
+  typedef RASearchRules<SortPolicy, MetricType, Tree> RuleType;
+  RuleType rules(*referenceSet, *referenceSet, k, metric, tau, alpha, naive,
+      sampleAtLeaves, firstLeafExact, singleSampleLimit, true /* same sets */);
+
+  if (naive)
+  {
+    // Find how many samples from the reference set we need and sample uniformly
+    // from the reference set without replacement.
+    const size_t numSamples = RAUtil::MinimumSamplesReqd(referenceSet->n_cols,
+        k, tau, alpha);
+    arma::uvec distinctSamples;
+    math::ObtainDistinctSamples(0, referenceSet->n_cols, numSamples,
+        distinctSamples);
+
+    // The naive brute-force solution.
+    for (size_t i = 0; i < referenceSet->n_cols; ++i)
+      for (size_t j = 0; j < referenceSet->n_cols; ++j)
+        rules.BaseCase(i, j);
+  }
+  else if (singleMode)
+  {
+    // Create the traverser.
+    typename Tree::template SingleTreeTraverser<RuleType> traverser(rules);
+
+    // Now have it traverse for each point.
+    for (size_t i = 0; i < referenceSet->n_cols; ++i)
+      traverser.Traverse(i, *referenceTree);
+  }
+  else
+  {
+    // Create the traverser.
+    typename Tree::template DualTreeTraverser<RuleType> traverser(rules);
+
+    traverser.Traverse(*referenceTree, *referenceTree);
+  }
+
+  rules.GetResults(*neighborPtr, *distancePtr);
+
+  Timer::Stop("computing_neighbors");
+
+  // Do we need to map the reference indices?
+  if (treeOwner && tree::TreeTraits<Tree>::RearrangesDataset)
+  {
+    neighbors.set_size(k, referenceSet->n_cols);
+    distances.set_size(k, referenceSet->n_cols);
+
+    for (size_t i = 0; i < distances.n_cols; ++i)
+    {
+      // Map distances (copy a column).
+      const size_t refMapping = oldFromNewReferences[i];
+      distances.col(refMapping) = distancePtr->col(i);
+
+      // Map each neighbor's index.
+      for (size_t j = 0; j < distances.n_rows; ++j)
+        neighbors(j, refMapping) = oldFromNewReferences[(*neighborPtr)(j, i)];
     }
 
     // Finished with temporary matrices.
     delete neighborPtr;
     delete distancePtr;
   }
-  else if (treeOwner && !hasQuerySet)
-  {
-    // No query tree -- map both references and queries.
-    resultingNeighbors.set_size(k, querySet.n_cols);
-    distances.set_size(k, querySet.n_cols);
-
-    for (size_t i = 0; i < distances.n_cols; i++)
-    {
-      // Map distances (copy a column).
-      distances.col(oldFromNewReferences[i]) = distancePtr->col(i);
-
-      // Map indices of neighbors.
-      for (size_t j = 0; j < distances.n_rows; j++)
-      {
-        resultingNeighbors(j, oldFromNewReferences[i]) =
-            oldFromNewReferences[(*neighborPtr)(j, i)];
-      }
-    }
-  }
-  else if (treeOwner && hasQuerySet && singleMode) // Map only references.
-  {
-    // Set size of neighbor indices matrix correctly.
-    resultingNeighbors.set_size(k, querySet.n_cols);
-
-    // Map indices of neighbors.
-    for (size_t i = 0; i < resultingNeighbors.n_cols; i++)
-    {
-      for (size_t j = 0; j < resultingNeighbors.n_rows; j++)
-      {
-        resultingNeighbors(j, i) = oldFromNewReferences[(*neighborPtr)(j, i)];
-      }
-    }
-
-    // Finished with temporary matrix.
-    delete neighborPtr;
-  }
-} // Search
-
-template<typename SortPolicy, typename MetricType, typename TreeType>
-void RASearch<SortPolicy, MetricType, TreeType>::ResetQueryTree()
-{
-  if (!singleMode)
-  {
-    if (queryTree)
-      ResetRAQueryStat(queryTree);
-    else
-      ResetRAQueryStat(referenceTree);
-  }
 }
 
-template<typename SortPolicy, typename MetricType, typename TreeType>
-void RASearch<SortPolicy, MetricType, TreeType>::ResetRAQueryStat(
-    TreeType* treeNode)
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+void RASearch<SortPolicy, MetricType, MatType, TreeType>::ResetQueryTree(
+    Tree* queryNode) const
 {
-  treeNode->Stat().Bound() = SortPolicy::WorstDistance();
-  treeNode->Stat().NumSamplesMade() = 0;
+  queryNode->Stat().Bound() = SortPolicy::WorstDistance();
+  queryNode->Stat().NumSamplesMade() = 0;
 
-  for (size_t i = 0; i < treeNode->NumChildren(); i++)
-    ResetRAQueryStat(&treeNode->Child(i));
+  for (size_t i = 0; i < queryNode->NumChildren(); i++)
+    ResetQueryTree(&queryNode->Child(i));
 }
 
-// Returns a String of the Object.
-template<typename SortPolicy, typename MetricType, typename TreeType>
-std::string RASearch<SortPolicy, MetricType, TreeType>::ToString() const
+template<typename SortPolicy,
+         typename MetricType,
+         typename MatType,
+         template<typename TreeMetricType,
+                  typename TreeStatType,
+                  typename TreeMatType> class TreeType>
+template<typename Archive>
+void RASearch<SortPolicy, MetricType, MatType, TreeType>::Serialize(
+    Archive& ar,
+    const unsigned int /* version */)
 {
-  std::ostringstream convert;
-  convert << "RA Search  [" << this << "]" << std::endl;
-  convert << "  Reference Set: " << referenceSet.n_rows << "x" ;
-  convert <<  referenceSet.n_cols << std::endl;
-  if (&referenceSet != &querySet)
-    convert << "  QuerySet: " << querySet.n_rows << "x" << querySet.n_cols
-        << std::endl;
+  using data::CreateNVP;
+
+  // Serialize preferences for search.
+  ar & CreateNVP(naive, "naive");
+  ar & CreateNVP(singleMode, "singleMode");
+
+  ar & CreateNVP(tau, "tau");
+  ar & CreateNVP(alpha, "alpha");
+  ar & CreateNVP(sampleAtLeaves, "sampleAtLeaves");
+  ar & CreateNVP(firstLeafExact, "firstLeafExact");
+  ar & CreateNVP(singleSampleLimit, "singleSampleLimit");
+
+  // If we are doing naive search, we serialize the dataset.  Otherwise we
+  // serialize the tree.
   if (naive)
-    convert << "  Naive: TRUE" << std::endl;
-  if (singleMode)
-    convert << "  Single Node: TRUE" << std::endl;
-  convert << "  Metric: " << std::endl <<
-      mlpack::util::Indent(metric.ToString(),2);
-  return convert.str();
+  {
+    if (Archive::is_loading::value)
+    {
+      if (setOwner && referenceSet)
+        delete referenceSet;
+
+      setOwner = true;
+    }
+
+    ar & CreateNVP(referenceSet, "referenceSet");
+    ar & CreateNVP(metric, "metric");
+
+    // If we are loading, set the tree to NULL and clean up memory if necessary.
+    if (Archive::is_loading::value)
+    {
+      if (treeOwner && referenceTree)
+        delete referenceTree;
+
+      referenceTree = NULL;
+      oldFromNewReferences.clear();
+      treeOwner = false;
+    }
+  }
+  else
+  {
+    // Delete the current reference tree, if necessary and if we are loading.
+    if (Archive::is_loading::value)
+    {
+      if (treeOwner && referenceTree)
+        delete referenceTree;
+
+      // After we load the tree, we will own it.
+      treeOwner = true;
+    }
+
+    ar & CreateNVP(referenceTree, "referenceTree");
+    ar & CreateNVP(oldFromNewReferences, "oldFromNewReferences");
+
+    // If we are loading, set the dataset accordingly and clean up memory if
+    // necessary.
+    if (Archive::is_loading::value)
+    {
+      if (setOwner && referenceSet)
+        delete referenceSet;
+
+      referenceSet = &referenceTree->Dataset();
+      metric = referenceTree->Metric();
+      setOwner = false;
+    }
+  }
 }
 
-}; // namespace neighbor
-}; // namespace mlpack
+} // namespace neighbor
+} // namespace mlpack
 
 #endif

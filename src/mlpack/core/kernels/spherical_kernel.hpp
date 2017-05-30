@@ -2,49 +2,64 @@
  * @file spherical_kernel.hpp
  * @author Neil Slagle
  *
- * This is an example kernel.  If you are making your own kernel, follow the
- * outline specified in this file.
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_KERNELS_SPHERICAL_KERNEL_H
-#define __MLPACK_CORE_KERNELS_SPHERICAL_KERNEL_H
+#ifndef MLPACK_CORE_KERNELS_SPHERICAL_KERNEL_HPP
+#define MLPACK_CORE_KERNELS_SPHERICAL_KERNEL_HPP
 
 #include <boost/math/special_functions/gamma.hpp>
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace kernel {
 
+/**
+ * The spherical kernel, which is 1 when the distance between the two argument
+ * points is less than or equal to the bandwidth, or 0 otherwise.
+ */
 class SphericalKernel
 {
  public:
-  SphericalKernel() :
-    bandwidth(1.0),
-    bandwidthSquared(1.0) {}
-  SphericalKernel(double b) :
-    bandwidth(b),
-    bandwidthSquared(b*b) {}
+  /**
+   * Construct the SphericalKernel with the given bandwidth.
+   */
+  SphericalKernel(const double bandwidth = 1.0) :
+    bandwidth(bandwidth),
+    bandwidthSquared(std::pow(bandwidth, 2.0))
+  { /* Nothing to do. */ }
 
-  template<typename VecType>
-  double Evaluate(const VecType& a, const VecType& b)
+  /**
+   * Evaluate the spherical kernel with the given two vectors.
+   *
+   * @tparam VecTypeA Type of first vector.
+   * @tparam VecTypeB Type of second vector.
+   * @param a First vector.
+   * @param b Second vector.
+   * @return The kernel evaluation between the two vectors.
+   */
+  template<typename VecTypeA, typename VecTypeB>
+  double Evaluate(const VecTypeA& a, const VecTypeB& b) const
   {
     return
-      (metric::SquaredEuclideanDistance::Evaluate(a, b) <= bandwidthSquared) ?
+        (metric::SquaredEuclideanDistance::Evaluate(a, b) <= bandwidthSquared) ?
         1.0 : 0.0;
   }
   /**
    * Obtains the convolution integral [integral K(||x-a||)K(||b-x||)dx]
-   * for the two vectors.  In this case, because
-   * our simple example kernel has no internal parameters, we can declare the
-   * function static.  For a more complex example which cannot be declared
-   * static, see the GaussianKernel, which stores an internal parameter.
+   * for the two vectors.
    *
-   * @tparam VecType Type of vector (arma::vec, arma::spvec should be expected).
+   * @tparam VecTypeA Type of first vector (arma::vec, arma::sp_vec should be
+   *       expected).
+   * @tparam VecTypeB Type of second vector.
    * @param a First vector.
    * @param b Second vector.
    * @return the convolution integral value.
    */
-  template<typename VecType>
-  double ConvolutionIntegral(const VecType& a, const VecType& b)
+  template<typename VecTypeA, typename VecTypeB>
+  double ConvolutionIntegral(const VecTypeA& a, const VecTypeB& b) const
   {
     double distance = sqrt(metric::SquaredEuclideanDistance::Evaluate(a, b));
     if (distance >= 2.0 * bandwidth)
@@ -53,7 +68,7 @@ class SphericalKernel
     }
     double volumeSquared = pow(Normalizer(a.n_rows), 2.0);
 
-    switch(a.n_rows)
+    switch (a.n_rows)
     {
       case 1:
         return 1.0 / volumeSquared * (2.0 * bandwidth - distance);
@@ -70,23 +85,31 @@ class SphericalKernel
         break;
     }
   }
-  double Normalizer(size_t dimension)
+  double Normalizer(size_t dimension) const
   {
     return pow(bandwidth, (double) dimension) * pow(M_PI, dimension / 2.0) /
-        boost::math::tgamma(dimension / 2.0 + 1.0);
+        std::tgamma(dimension / 2.0 + 1.0);
   }
-  double Evaluate(double t)
+
+  /**
+   * Evaluate the kernel when only a distance is given, not two points.
+   *
+   * @param t Argument to kernel.
+   */
+  double Evaluate(const double t) const
   {
     return (t <= bandwidth) ? 1.0 : 0.0;
   }
+  double Gradient(double t) {
+    return t == bandwidth ? arma::datum::nan : 0.0;
+  }
 
-  //! Return a string representation of the kernel.
-  std::string ToString() const
+  //! Serialize the object.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
   {
-    std::ostringstream convert;
-    convert << "SphericalKernel [" << this << "]" << std::endl;
-    convert << "  Bandwidth: " << bandwidth << std::endl;
-    return convert.str();
+    ar & data::CreateNVP(bandwidth, "bandwidth");
+    ar & data::CreateNVP(bandwidthSquared, "bandwidthSquared");
   }
 
  private:
@@ -101,9 +124,11 @@ class KernelTraits<SphericalKernel>
  public:
   //! The spherical kernel is normalized: K(x, x) = 1 for all x.
   static const bool IsNormalized = true;
+  //! The spherical kernel doesn't include a squared distance.
+  static const bool UsesSquaredDistance = false;
 };
 
-}; // namespace kernel
-}; // namespace mlpack
+} // namespace kernel
+} // namespace mlpack
 
 #endif

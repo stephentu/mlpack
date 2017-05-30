@@ -3,10 +3,15 @@
  * @author Zhihao Lou
  *
  * Laplace (double exponential) distribution used in SA.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 
-#ifndef __MLPACK_CORE_DISTRIBUTIONS_LAPLACE_DISTRIBUTION_HPP
-#define __MLPACK_CORE_DISTRIBUTIONS_LAPLACE_DISTRIBUTION_HPP
+#ifndef MLPACK_CORE_DISTRIBUTIONS_LAPLACE_DISTRIBUTION_HPP
+#define MLPACK_CORE_DISTRIBUTIONS_LAPLACE_DISTRIBUTION_HPP
 
 namespace mlpack {
 namespace distribution {
@@ -135,25 +140,24 @@ class LaplaceDistribution
   //! Modify the scale parameter.
   double& Scale() { return scale; }
 
-  //! Return a string representation of the object.
-  std::string ToString() const;
-
-  /*
-  * Save to or Load from SaveRestoreUtility
-  */
-  void Save(util::SaveRestoreUtility& n) const;
-  void Load(const util::SaveRestoreUtility& n);
-  static std::string const Type() { return "LaplaceDistribution"; }
+  /**
+   * Serialize the distribution.
+   */
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
+  {
+    ar & data::CreateNVP(mean, "mean");
+    ar & data::CreateNVP(scale, "scale");
+  }
 
  private:
   //! Mean of the distribution.
   arma::vec mean;
   //! Scale parameter of the distribution.
   double scale;
-
 };
 
-}; // namespace distribution
-}; // namespace mlpack
+} // namespace distribution
+} // namespace mlpack
 
 #endif

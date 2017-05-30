@@ -3,8 +3,13 @@
  * @author Zhihao Lou
  *
  * Implementation of Laplace distribution.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 #include "laplace_distribution.hpp"
 
@@ -16,7 +21,8 @@ using namespace mlpack::distribution;
  */
 double LaplaceDistribution::LogProbability(const arma::vec& observation) const
 {
-  // Evaluate the PDF of the Laplace distribution to determine the log probability.
+  // Evaluate the PDF of the Laplace distribution to determine
+  // the log probability.
   return -log(2. * scale) - arma::norm(observation - mean, 2) / scale;
 }
 
@@ -74,31 +80,4 @@ void LaplaceDistribution::Estimate(const arma::mat& observations,
   for (size_t i = 0; i < observations.n_cols; ++i)
     scale += probabilities(i) * arma::norm(observations.col(i) - mean, 2);
   scale /= arma::accu(probabilities);
-}
-
-//! Returns a string representation of this object.
-std::string LaplaceDistribution::ToString() const
-{
-  std::ostringstream convert;
-  convert << "LaplaceDistribution [" << this << "]" << std::endl;
-
-  std::ostringstream data;
-  data << "Mean: " << std::endl << mean.t();
-  data << "Scale: " << scale << "." << std::endl;
-
-  convert << util::Indent(data.str());
-  return convert.str();
-}
-
-/*
- * Save to or Load from SaveRestoreUtility
- */
-void LaplaceDistribution::Save(util::SaveRestoreUtility& sr) const {
-  sr.SaveParameter(Type(), "type");
-  sr.SaveParameter(mean, "mean");
-  sr.SaveParameter(scale, "scale");
-}
-void LaplaceDistribution::Load(const util::SaveRestoreUtility& sr) {
-  sr.LoadParameter(mean, "mean");
-  sr.LoadParameter(scale, "scale");
 }

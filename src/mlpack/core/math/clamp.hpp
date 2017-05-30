@@ -2,9 +2,14 @@
  * @file clamp.hpp
  *
  * Miscellaneous math clamping routines.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_MATH_CLAMP_HPP
-#define __MLPACK_CORE_MATH_CLAMP_HPP
+#ifndef MLPACK_CORE_MATH_CLAMP_HPP
+#define MLPACK_CORE_MATH_CLAMP_HPP
 
 #include <stdlib.h>
 #include <math.h>
@@ -56,7 +61,7 @@ inline double ClampRange(double value,
   return value;
 }
 
-}; // namespace math
-}; // namespace mlpack
+} // namespace math
+} // namespace mlpack
 
-#endif // __MLPACK_CORE_MATH_CLAMP_HPP
+#endif // MLPACK_CORE_MATH_CLAMP_HPP

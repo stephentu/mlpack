@@ -16,11 +16,16 @@
  *   year={2010}
  * }
  * @endcode
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_ANN_ACTIVATION_FUNCTIONS_SOFTSIGN_FUNCTION_HPP
-#define __MLPACK_METHODS_ANN_ACTIVATION_FUNCTIONS_SOFTSIGN_FUNCTION_HPP
+#ifndef MLPACK_METHODS_ANN_ACTIVATION_FUNCTIONS_SOFTSIGN_FUNCTION_HPP
+#define MLPACK_METHODS_ANN_ACTIVATION_FUNCTIONS_SOFTSIGN_FUNCTION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace ann /** Artificial Neural Network. */ {
@@ -28,16 +33,16 @@ namespace ann /** Artificial Neural Network. */ {
 /**
  * The softsign function, defined by
  *
- * @f[
- * f(x) &=& \frac{x}{1 + \abs{x}} \\
- * f'(x) &=& (1 - \abs{x})^2
+ * @f{eqnarray*}{
+ * f(x) &=& \frac{x}{1 + |x|} \\
+ * f'(x) &=& (1 - |x|)^2 \\
  * f(x) &=& \left\{
  *   \begin{array}{lr}
  *     -\frac{y}{y-1} & : x > 0 \\
  *     \frac{x}{1 + x} & : x \le 0
  *   \end{array}
- * \right
- * @f]
+ * \right.
+ * @f}
  */
 class SoftsignFunction
 {
@@ -48,7 +53,7 @@ class SoftsignFunction
    * @param x Input data.
    * @return f(x).
    */
-  static double fn(const double x)
+  static double Fn(const double x)
   {
     if (x < DBL_MAX)
       return x > -DBL_MAX ? x / (1.0 + std::abs(x)) : -1.0;
@@ -62,10 +67,12 @@ class SoftsignFunction
    * @param y The resulting output activation.
    */
   template<typename InputVecType, typename OutputVecType>
-  static void fn(const InputVecType& x, OutputVecType& y)
+  static void Fn(const InputVecType& x, OutputVecType& y)
   {
     y = x;
-    y.transform( [](double x) { return fn(x); } );
+
+    for (size_t i = 0; i < x.n_elem; i++)
+      y(i) = Fn(x(i));
   }
 
   /**
@@ -74,7 +81,7 @@ class SoftsignFunction
    * @param y Input data.
    * @return f'(x)
    */
-  static double deriv(const double y)
+  static double Deriv(const double y)
   {
     return std::pow(1.0 - std::abs(y), 2);
   }
@@ -86,7 +93,7 @@ class SoftsignFunction
    * @param x The resulting derivatives.
    */
   template<typename InputVecType, typename OutputVecType>
-  static void deriv(const InputVecType& y, OutputVecType& x)
+  static void Deriv(const InputVecType& y, OutputVecType& x)
   {
     x = arma::pow(1.0 - arma::abs(y), 2);
   }
@@ -97,7 +104,7 @@ class SoftsignFunction
    * @param y Input data.
    * @return f^{-1}(y)
    */
-  static double inv(const double y)
+  static double Inv(const double y)
   {
     if (y > 0)
       return y < 1 ? -y / (y - 1) : DBL_MAX;
@@ -112,14 +119,16 @@ class SoftsignFunction
    * @param x The resulting inverse of the input data.
    */
   template<typename InputVecType, typename OutputVecType>
-  static void inv(const InputVecType& y, OutputVecType& x)
+  static void Inv(const InputVecType& y, OutputVecType& x)
   {
     x = y;
-    x.transform( [](double y) { return inv(y); } );
+
+    for (size_t i = 0; i < y.n_elem; i++)
+      x(i) = Inv(y(i));
   }
 }; // class SoftsignFunction
 
-}; // namespace ann
-}; // namespace mlpack
+} // namespace ann
+} // namespace mlpack
 
 #endif

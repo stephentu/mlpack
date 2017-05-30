@@ -3,11 +3,16 @@
  * @author Mohan Rajendran
  *
  * Update rules for the Non-negative Matrix Factorization.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_LMF_UPDATE_RULES_NMF_MULT_DIV_HPP
-#define __MLPACK_METHODS_LMF_UPDATE_RULES_NMF_MULT_DIV_HPP
+#ifndef MLPACK_METHODS_LMF_UPDATE_RULES_NMF_MULT_DIV_HPP
+#define MLPACK_METHODS_LMF_UPDATE_RULES_NMF_MULT_DIV_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace amf {
@@ -143,6 +148,10 @@ class NMFMultiplicativeDivergenceUpdate
       }
     }
   }
+
+  //! Serialize the object (in this case, there is nothing to serialize).
+  template<typename Archive>
+  void Serialize(Archive& /* ar */, const unsigned int /* version */) { }
 };
 
 } // namespace amf

@@ -6,13 +6,14 @@
  * determine if classes passed in as template parameters contain members at
  * compile time, which is useful for changing functionality depending on what
  * operations an object is capable of performing.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_SFINAE_UTILITY
-#define __MLPACK_CORE_SFINAE_UTILITY
-
-#include <boost/utility/enable_if.hpp>
-#include <boost/type_traits.hpp>
-#include <mlpack/prereqs.hpp>
+#ifndef MLPACK_CORE_SFINAE_UTILITY
+#define MLPACK_CORE_SFINAE_UTILITY
 
 /*
  * Constructs a template supporting the SFINAE pattern.
@@ -21,13 +22,12 @@
  * a method if the template class passed in contains a member function matching
  * a given signature with a specified name.
  *
- * The generated struct should be used in conjunction with boost::disable_if and
- * boost::enable_if. Here is an example usage:
+ * The generated struct should be used in conjunction with std::enable_if_t.
  *
  * For general references, see:
  * http://stackoverflow.com/a/264088/391618
  *
- * For an MLPACK specific use case, see /mlpack/core/util/prefixedoutstream.hpp
+ * For an mlpack specific use case, see /mlpack/core/util/prefixedoutstream.hpp
  * and /mlpack/core/util/prefixedoutstream_impl.hpp
  *
  * @param NAME the name of the struct to construct. For example: HasToString

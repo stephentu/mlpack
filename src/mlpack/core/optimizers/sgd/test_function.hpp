@@ -3,11 +3,16 @@
  * @author Ryan Curtin
  *
  * Very simple test function for SGD.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_OPTIMIZERS_SGD_TEST_FUNCTION_HPP
-#define __MLPACK_CORE_OPTIMIZERS_SGD_TEST_FUNCTION_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_SGD_TEST_FUNCTION_HPP
+#define MLPACK_CORE_OPTIMIZERS_SGD_TEST_FUNCTION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace optimization {
@@ -38,8 +43,8 @@ class SGDTestFunction
                 arma::mat& gradient) const;
 };
 
-}; // namespace test
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace test
+} // namespace optimization
+} // namespace mlpack
 
 #endif

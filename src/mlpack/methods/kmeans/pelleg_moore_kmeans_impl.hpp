@@ -4,9 +4,14 @@
  *
  * An implementation of Pelleg-Moore's 'blacklist' algorithm for k-means
  * clustering.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_IMPL_HPP
-#define __MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_IMPL_HPP
+#ifndef MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_IMPL_HPP
+#define MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_IMPL_HPP
 
 #include "pelleg_moore_kmeans.hpp"
 #include "pelleg_moore_kmeans_rules.hpp"
@@ -19,21 +24,12 @@ PellegMooreKMeans<MetricType, MatType>::PellegMooreKMeans(
     const MatType& dataset,
     MetricType& metric) :
     datasetOrig(dataset),
-    dataset(tree::TreeTraits<TreeType>::RearrangesDataset ? datasetCopy :
-        datasetOrig),
+    tree(new TreeType(const_cast<MatType&>(datasetOrig))),
+    dataset(tree->Dataset()),
     metric(metric),
     distanceCalculations(0)
 {
-  Timer::Start("tree_building");
-
-  // Copy the dataset, if necessary.
-  if (tree::TreeTraits<TreeType>::RearrangesDataset)
-    datasetCopy = datasetOrig;
-
-  // Now build the tree.  We don't need any mappings.
-  tree = new TreeType(const_cast<typename TreeType::Mat&>(this->dataset));
-
-  Timer::Stop("tree_building");
+  // Nothing to do.
 }
 
 template<typename MetricType, typename MatType>
@@ -70,11 +66,7 @@ double PellegMooreKMeans<MetricType, MatType>::Iterate(
   double residual = 0.0;
   for (size_t c = 0; c < centroids.n_cols; ++c)
   {
-    if (counts[c] == 0)
-    {
-      newCentroids.col(c).fill(DBL_MAX); // Should have happened anyway I think.
-    }
-    else
+    if (counts[c] > 0)
     {
       newCentroids.col(c) /= counts(c);
       residual += std::pow(metric.Evaluate(centroids.col(c),

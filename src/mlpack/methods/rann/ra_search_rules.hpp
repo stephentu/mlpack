@@ -5,34 +5,83 @@
  * Defines the pruning rules and base case rules necessary to perform a
  * tree-based rank-approximate search (with an arbitrary tree) for the RASearch
  * class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_RANN_RA_SEARCH_RULES_HPP
-#define __MLPACK_METHODS_RANN_RA_SEARCH_RULES_HPP
+#ifndef MLPACK_METHODS_RANN_RA_SEARCH_RULES_HPP
+#define MLPACK_METHODS_RANN_RA_SEARCH_RULES_HPP
 
-#include "../neighbor_search/ns_traversal_info.hpp"
-#include "ra_search.hpp" // For friend declaration.
+#include <mlpack/core/tree/traversal_info.hpp>
+
+#include <queue>
 
 namespace mlpack {
 namespace neighbor {
 
+/**
+ * The RASearchRules class is a template helper class used by RASearch class
+ * when performing rank-approximate search via random-sampling.
+ *
+ * @tparam SortPolicy The sort policy for distances.
+ * @tparam MetricType The metric to use for computation.
+ * @tparam TreeType The tree type to use; must adhere to the TreeType API.
+ */
 template<typename SortPolicy, typename MetricType, typename TreeType>
 class RASearchRules
 {
  public:
+  /**
+   * Construct the RASearchRules object.  This is usually done from within
+   * the RASearch class at search time.
+   *
+   * @param referenceSet Set of reference data.
+   * @param querySet Set of query data.
+   * @param k Number of neighbors to search for.
+   * @param metric Instantiated metric.
+   * @param tau The rank-approximation in percentile of the data.
+   * @param alpha The desired success probability.
+   * @param naive If true, the rank-approximate search will be performed by
+   *      directly sampling the whole set instead of using the stratified
+   *      sampling on the tree.
+   * @param sampleAtLeaves Sample at leaves for faster but less accurate
+   *      computation.
+   * @param firstLeafExact Traverse to the first leaf without approximation.
+   * @param singleSampleLimit The limit on the largest node that can be
+   *     approximated by sampling.
+   * @param sameSet If true, the query and reference set are taken to be the
+   *      same, and a query point will not return itself in the results.
+   */
   RASearchRules(const arma::mat& referenceSet,
                 const arma::mat& querySet,
-                arma::Mat<size_t>& neighbors,
-                arma::mat& distances,
+                const size_t k,
                 MetricType& metric,
                 const double tau = 5,
                 const double alpha = 0.95,
                 const bool naive = false,
                 const bool sampleAtLeaves = false,
                 const bool firstLeafExact = false,
-                const size_t singleSampleLimit = 20);
+                const size_t singleSampleLimit = 20,
+                const bool sameSet = false);
 
+  /**
+   * Store the list of candidates for each query point in the given matrices.
+   *
+   * @param neighbors Matrix storing lists of neighbors for each query point.
+   * @param distances Matrix storing distances of neighbors for each query
+   *     point.
+   */
+  void GetResults(arma::Mat<size_t>& neighbors, arma::mat& distances);
 
-
+  /**
+   * Get the distance from the query point to the reference point.
+   * This will update the list of candidates with the new point if appropriate.
+   *
+   * @param queryIndex Index of query point.
+   * @param referenceIndex Index of reference point.
+   */
   double BaseCase(const size_t queryIndex, const size_t referenceIndex);
 
   /**
@@ -187,7 +236,7 @@ class RASearchRules
       return arma::sum(numSamplesMade);
   }
 
-  typedef neighbor::NeighborSearchTraversalInfo<TreeType> TraversalInfoType;
+  typedef typename tree::TraversalInfo<TreeType> TraversalInfoType;
 
   const TraversalInfoType& TraversalInfo() const { return traversalInfo; }
   TraversalInfoType& TraversalInfo() { return traversalInfo; }
@@ -199,92 +248,66 @@ class RASearchRules
   //! The query set.
   const arma::mat& querySet;
 
-  //! The matrix the resultant neighbor indices should be stored in.
-  arma::Mat<size_t>& neighbors;
+  //! Candidate represents a possible candidate neighbor (distance, index).
+  typedef std::pair<double, size_t> Candidate;
 
-  //! The matrix the resultant neighbor distances should be stored in.
-  arma::mat& distances;
+  //! Compare two candidates based on the distance.
+  struct CandidateCmp {
+    bool operator()(const Candidate& c1, const Candidate& c2)
+    {
+      return !SortPolicy::IsBetter(c2.first, c1.first);
+    };
+  };
+
+  //! Use a priority queue to represent the list of candidate neighbors.
+  typedef std::priority_queue<Candidate, std::vector<Candidate>, CandidateCmp>
+      CandidateList;
+
+  //! Set of candidate neighbors for each point.
+  std::vector<CandidateList> candidates;
+
+  //! Number of neighbors to search for.
+  const size_t k;
 
   //! The instantiated metric.
   MetricType& metric;
 
-  //! Whether to sample at leaves or just use all of it
+  //! Whether to sample at leaves or just use all of it.
   bool sampleAtLeaves;
 
-  //! Whether to do exact computation on the first leaf before any sampling
+  //! Whether to do exact computation on the first leaf before any sampling.
   bool firstLeafExact;
 
-  //! The limit on the largest node that can be approximated by sampling
+  //! The limit on the largest node that can be approximated by sampling.
   size_t singleSampleLimit;
 
-  //! The minimum number of samples required per query
+  //! The minimum number of samples required per query.
   size_t numSamplesReqd;
 
-  //! The number of samples made for every query
+  //! The number of samples made for every query.
   arma::Col<size_t> numSamplesMade;
 
-  //! The sampling ratio
+  //! The sampling ratio.
   double samplingRatio;
 
-  // TO REMOVE: just for testing
+  //! The number of distance calculations performed during search.
   size_t numDistComputations;
+
+  //! If the query and reference set are identical, this is true.
+  bool sameSet;
 
   TraversalInfoType traversalInfo;
 
   /**
-   * Insert a point into the neighbors and distances matrices; this is a helper
-   * function.
+   * Helper function to insert a point into the list of candidate points.
    *
    * @param queryIndex Index of point whose neighbors we are inserting into.
-   * @param pos Position in list to insert into.
    * @param neighbor Index of reference point which is being inserted.
    * @param distance Distance from query point to reference point.
    */
   void InsertNeighbor(const size_t queryIndex,
-                      const size_t pos,
                       const size_t neighbor,
                       const double distance);
-
-  /**
-   * Compute the minimum number of samples required to guarantee
-   * the given rank-approximation and success probability.
-   *
-   * @param n Size of the set to be sampled from.
-   * @param k The number of neighbors required within the rank-approximation.
-   * @param tau The rank-approximation in percentile of the data.
-   * @param alpha The success probability desired.
-   */
-  size_t MinimumSamplesReqd(const size_t n,
-                            const size_t k,
-                            const double tau,
-                            const double alpha) const;
-
-  /**
-   * Compute the success probability of obtaining 'k'-neighbors from a
-   * set of size 'n' within the top 't' neighbors if 'm' samples are made.
-   *
-   * @param n Size of the set being sampled from.
-   * @param k The number of neighbors required within the rank-approximation.
-   * @param m The number of random samples.
-   * @param t The desired rank-approximation.
-   */
-  double SuccessProbability(const size_t n,
-                            const size_t k,
-                            const size_t m,
-                            const size_t t) const;
-
-  /**
-   * Pick up desired number of samples (with replacement) from a given range
-   * of integers so that only the distinct samples are returned from
-   * the range [0 - specified upper bound)
-   *
-   * @param numSamples Number of random samples.
-   * @param rangeUpperBound The upper bound on the range of integers.
-   * @param distinctSamples The list of the distinct samples.
-   */
-  void ObtainDistinctSamples(const size_t numSamples,
-                             const size_t rangeUpperBound,
-                             arma::uvec& distinctSamples) const;
 
   /**
    * Perform actual scoring for single-tree case.
@@ -302,16 +325,14 @@ class RASearchRules
                const double distance,
                const double bestDistance);
 
-  // So that RASearch can access ObtainDistinctSamples() and
-  // MinimumSamplesReqd().  Maybe refactoring is a better solution but this is
-  // okay for now.
-  friend class RASearch<SortPolicy, MetricType, TreeType>;
+  static_assert(tree::TreeTraits<TreeType>::UniqueNumDescendants, "TreeType "
+      "must provide a unique number of descendants points.");
 }; // class RASearchRules
 
-}; // namespace neighbor
-}; // namespace mlpack
+} // namespace neighbor
+} // namespace mlpack
 
 // Include implementation.
 #include "ra_search_rules_impl.hpp"
 
-#endif // __MLPACK_METHODS_RANN_RA_SEARCH_RULES_HPP
+#endif // MLPACK_METHODS_RANN_RA_SEARCH_RULES_HPP

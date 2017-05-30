@@ -3,9 +3,15 @@
  * @author Siddharth Agrawal
  *
  * An implementation of the RegularizedSVDFunction class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 
 #include "regularized_svd_function.hpp"
+#include <mlpack/core/optimizers/sgd/sgd.hpp>
 
 namespace mlpack {
 namespace svd {
@@ -116,15 +122,16 @@ void RegularizedSVDFunction::Gradient(const arma::mat& parameters,
   }
 }
 
-}; // namespace svd
-}; // namespace mlpack
+} // namespace svd
+} // namespace mlpack
 
 // Template specialization for the SGD optimizer.
 namespace mlpack {
 namespace optimization {
 
 template<>
-double SGD<mlpack::svd::RegularizedSVDFunction>::Optimize(arma::mat& parameters)
+double StandardSGD<mlpack::svd::RegularizedSVDFunction>::Optimize(
+    arma::mat& parameters)
 {
   // Find the number of functions to use.
   const size_t numFunctions = function.NumFunctions();
@@ -143,7 +150,7 @@ double SGD<mlpack::svd::RegularizedSVDFunction>::Optimize(arma::mat& parameters)
   for(size_t i = 1; i != maxIterations; i++, currentFunction++)
   {
     // Is this iteration the start of a sequence?
-    if((currentFunction % numFunctions) == 0)
+    if ((currentFunction % numFunctions) == 0)
     {
       // Reset the counter variables.
       overallObjective = 0;
@@ -177,5 +184,5 @@ double SGD<mlpack::svd::RegularizedSVDFunction>::Optimize(arma::mat& parameters)
   return overallObjective;
 }
 
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack

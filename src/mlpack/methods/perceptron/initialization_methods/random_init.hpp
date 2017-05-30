@@ -3,11 +3,16 @@
  * @author Udit Saxena
  *
  * Random initialization for perceptron weights.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef _MLPACK_METHOS_PERCEPTRON_INITIALIZATION_METHODS_RANDOM_INIT_HPP
-#define _MLPACK_METHOS_PERCEPTRON_INITIALIZATION_METHODS_RANDOM_INIT_HPP
+#ifndef MLPACK_METHODS_PERCEPTRON_INITIALIZATION_METHODS_RANDOM_INIT_HPP
+#define MLPACK_METHODS_PERCEPTRON_INITIALIZATION_METHODS_RANDOM_INIT_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace perceptron {
@@ -21,15 +26,17 @@ class RandomInitialization
  public:
   RandomInitialization() { }
 
-  inline static void Initialize(arma::mat& W,
-                                const size_t row,
-                                const size_t col)
+  inline static void Initialize(arma::mat& weights,
+                                arma::vec& biases,
+                                const size_t numFeatures,
+                                const size_t numClasses)
   {
-    W = arma::randu<arma::mat>(row, col);
+    weights.randu(numFeatures, numClasses);
+    biases.randu(numClasses);
   }
 }; // class RandomInitialization
 
-}; // namespace perceptron
-}; // namespace mlpack
+} // namespace perceptron
+} // namespace mlpack
 
 #endif

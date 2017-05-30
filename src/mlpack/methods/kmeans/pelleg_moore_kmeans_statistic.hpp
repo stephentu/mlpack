@@ -4,9 +4,14 @@
  *
  * A StatisticType for trees which holds the blacklist for various k-means
  * clusters.  See the Pelleg and Moore paper for more details.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_STATISTIC_HPP
-#define __MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_STATISTIC_HPP
+#ifndef MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_STATISTIC_HPP
+#define MLPACK_METHODS_KMEANS_PELLEG_MOORE_KMEANS_STATISTIC_HPP
 
 namespace mlpack {
 namespace kmeans {
@@ -58,16 +63,6 @@ class PellegMooreKMeansStatistic
   //! Modify the node's centroid (be careful!).
   arma::vec& Centroid() { return centroid; }
 
-  //! Return the object as a string.
-  std::string ToString() const
-  {
-    std::ostringstream convert;
-    convert << "KMeansStatistic [" << this << "]" << std::endl;
-    convert << "  Blacklist: " << blacklist.t();
-    convert << "  Centroid: " << centroid.t();
-    return convert.str();
-  }
-
  private:
   //! The cluster blacklist for the node.
   arma::uvec blacklist;
@@ -75,7 +70,7 @@ class PellegMooreKMeansStatistic
   arma::vec centroid;
 };
 
-}; // namespace kmeans
-}; // namespace mlpack
+} // namespace kmeans
+} // namespace mlpack
 
 #endif

@@ -3,13 +3,18 @@
  * @author Bill March (march@gatech.edu)
  *
  * Tree traverser rules for the DualTreeBoruvka algorithm.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_EMST_DTB_RULES_HPP
-#define __MLPACK_METHODS_EMST_DTB_RULES_HPP
+#ifndef MLPACK_METHODS_EMST_DTB_RULES_HPP
+#define MLPACK_METHODS_EMST_DTB_RULES_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
-#include "../neighbor_search/ns_traversal_info.hpp"
+#include <mlpack/core/tree/traversal_info.hpp>
 
 namespace mlpack {
 namespace emst {
@@ -38,20 +43,6 @@ class DTBRules
   double Score(const size_t queryIndex, TreeType& referenceNode);
 
   /**
-   * Get the score for recursion order, passing the base case result (in the
-   * situation where it may be needed to calculate the recursion order).  A low
-   * score indicates priority for recursion, while DBL_MAX indicates that the
-   * node should not be recursed into at all (it should be pruned).
-   *
-   * @param queryIndex Index of query point.
-   * @param referenceNode Candidate node to be recursed into.
-   * @param baseCaseResult Result of BaseCase(queryIndex, referenceNode).
-   */
-  double Score(const size_t queryIndex,
-               TreeType& referenceNode,
-               const double baseCaseResult);
-
-  /**
    * Re-evaluate the score for recursion order.  A low score indicates priority
    * for recursion, while DBL_MAX indicates that the node should not be recursed
    * into at all (it should be pruned).  This is used when the score has already
@@ -77,20 +68,6 @@ class DTBRules
   double Score(TreeType& queryNode, TreeType& referenceNode);
 
   /**
-   * Get the score for recursion order, passing the base case result (in the
-   * situation where it may be needed to calculate the recursion order).  A low
-   * score indicates priority for recursion, while DBL_MAX indicates that the
-   * node should not be recursed into at all (it should be pruned).
-   *
-   * @param queryNode Candidate query node to recurse into.
-   * @param referenceNode Candidate reference node to recurse into.
-   * @param baseCaseResult Result of BaseCase(queryIndex, referenceNode).
-   */
-  double Score(TreeType& queryNode,
-               TreeType& referenceNode,
-               const double baseCaseResult);
-
-  /**
    * Re-evaluate the score for recursion order.  A low score indicates priority
    * for recursion, while DBL_MAX indicates that the node should not be recursed
    * into at all (it should be pruned).  This is used when the score has already
@@ -105,7 +82,7 @@ class DTBRules
                  TreeType& referenceNode,
                  const double oldScore) const;
 
-  typedef neighbor::NeighborSearchTraversalInfo<TreeType> TraversalInfoType;
+  typedef typename tree::TraversalInfo<TreeType> TraversalInfoType;
 
   const TraversalInfoType& TraversalInfo() const { return traversalInfo; }
   TraversalInfoType& TraversalInfo() { return traversalInfo; }

@@ -3,11 +3,16 @@
  * @author Sumedh Ghaisas
  *
  * Termination policy used in AMF (Alternating Matrix Factorization).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #ifndef _MLPACK_METHODS_AMF_SIMPLERESIDUETERMINATION_HPP_INCLUDED
 #define _MLPACK_METHODS_AMF_SIMPLERESIDUETERMINATION_HPP_INCLUDED
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace amf {
@@ -62,8 +67,11 @@ class SimpleResidueTermination
    */
   bool IsConverged(arma::mat& W, arma::mat& H)
   {
-    // Calculate the norm and compute the residue
-    const double norm = arma::norm(W * H, "fro");
+    // Calculate the norm and compute the residue, but do it by hand, so as to
+    // avoid calculating (W*H), which may be very large.
+    double norm = 0.0;
+    for (size_t j = 0; j < H.n_cols; ++j)
+      norm += arma::norm(W * H.col(j), "fro");
     residue = fabs(normOld - norm) / normOld;
 
     // Store the norm.
@@ -71,6 +79,7 @@ class SimpleResidueTermination
 
     // Increment iteration count
     iteration++;
+    Log::Info << "Iteration " << iteration << "; residue " << residue << ".\n";
 
     // Check if termination criterion is met.
     return (residue < minResidue || iteration > maxIterations);
@@ -106,8 +115,8 @@ public:
   size_t nm;
 }; // class SimpleResidueTermination
 
-}; // namespace amf
-}; // namespace mlpack
+} // namespace amf
+} // namespace mlpack
 
 
 #endif // _MLPACK_METHODS_AMF_SIMPLERESIDUETERMINATION_HPP_INCLUDED

@@ -2,16 +2,22 @@
  * @file naive_bayes_classifier_impl.hpp
  * @author Parikshit Ram (pram@cc.gatech.edu)
  * @author Vahab Akbarzadeh (v.akbarzadeh@gmail.com)
+ * @author Shihao Jing (shihao.jing810@gmail.com)
  *
  * A Naive Bayes Classifier which parametrically estimates the distribution of
  * the features.  This classifier makes its predictions based on the assumption
  * that the features have been sampled from a set of Gaussians with diagonal
  * covariance.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_NAIVE_BAYES_NAIVE_BAYES_CLASSIFIER_IMPL_HPP
-#define __MLPACK_METHODS_NAIVE_BAYES_NAIVE_BAYES_CLASSIFIER_IMPL_HPP
+#ifndef MLPACK_METHODS_NAIVE_BAYES_NAIVE_BAYES_CLASSIFIER_IMPL_HPP
+#define MLPACK_METHODS_NAIVE_BAYES_NAIVE_BAYES_CLASSIFIER_IMPL_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 // In case it hasn't been included already.
 #include "naive_bayes_classifier.hpp"
@@ -22,26 +28,55 @@ namespace naive_bayes {
 template<typename MatType>
 NaiveBayesClassifier<MatType>::NaiveBayesClassifier(
     const MatType& data,
-    const arma::Col<size_t>& labels,
+    const arma::Row<size_t>& labels,
     const size_t classes,
-    const bool incrementalVariance)
+    const bool incremental) :
+    trainingPoints(0) // Set when we call Train().
 {
   const size_t dimensionality = data.n_rows;
 
-  // Update the variables according to the number of features and classes
-  // present in the data.
+  // Perform training, after initializing the model to 0 (that is, if Train()
+  // won't do that for us, which it won't if we're using the incremental
+  // algorithm).
+  if (incremental)
+  {
+    probabilities.zeros(classes);
+    means.zeros(dimensionality, classes);
+    variances.zeros(dimensionality, classes);
+  }
+  else
+  {
+    probabilities.set_size(classes);
+    means.set_size(dimensionality, classes);
+    variances.set_size(dimensionality, classes);
+  }
+  Train(data, labels, incremental);
+}
+
+template<typename MatType>
+NaiveBayesClassifier<MatType>::NaiveBayesClassifier(const size_t dimensionality,
+                                                    const size_t classes) :
+    trainingPoints(0)
+{
+  // Initialize model to 0.
   probabilities.zeros(classes);
   means.zeros(dimensionality, classes);
   variances.zeros(dimensionality, classes);
+}
 
-  Log::Info << "Training Naive Bayes classifier on " << data.n_cols
-      << " examples with " << dimensionality << " features each." << std::endl;
-
+template<typename MatType>
+void NaiveBayesClassifier<MatType>::Train(const MatType& data,
+                                          const arma::Row<size_t>& labels,
+                                          const bool incremental)
+{
   // Calculate the class probabilities as well as the sample mean and variance
   // for each of the features with respect to each of the labels.
-  if (incrementalVariance)
+  if (incremental)
   {
     // Use incremental algorithm.
+    // Fist, de-normalize probabilities.
+    probabilities *= trainingPoints;
+
     for (size_t j = 0; j < data.n_cols; ++j)
     {
       const size_t label = labels[j];
@@ -52,7 +87,7 @@ NaiveBayesClassifier<MatType>::NaiveBayesClassifier(
       variances.col(label) += delta % (data.col(j) - means.col(label));
     }
 
-    for (size_t i = 0; i < classes; ++i)
+    for (size_t i = 0; i < probabilities.n_elem; ++i)
     {
       if (probabilities[i] > 2)
         variances.col(i) /= (probabilities[i] - 1);
@@ -60,6 +95,11 @@ NaiveBayesClassifier<MatType>::NaiveBayesClassifier(
   }
   else
   {
+    // Set all parameters to zero
+    probabilities.zeros();
+    means.zeros();
+    variances.zeros();
+
     // Don't use incremental algorithm.  This is a two-pass algorithm.  It is
     // possible to calculate the means and variances using a faster one-pass
     // algorithm but there are some precision and stability issues.  If this is
@@ -75,7 +115,7 @@ NaiveBayesClassifier<MatType>::NaiveBayesClassifier(
     }
 
     // Normalize means.
-    for (size_t i = 0; i < classes; ++i)
+    for (size_t i = 0; i < probabilities.n_elem; ++i)
       if (probabilities[i] != 0.0)
         means.col(i) /= probabilities[i];
 
@@ -87,7 +127,7 @@ NaiveBayesClassifier<MatType>::NaiveBayesClassifier(
     }
 
     // Normalize variances.
-    for (size_t i = 0; i < classes; ++i)
+    for (size_t i = 0; i < probabilities.n_elem; ++i)
       if (probabilities[i] > 1)
         variances.col(i) /= (probabilities[i] - 1);
   }
@@ -98,27 +138,44 @@ NaiveBayesClassifier<MatType>::NaiveBayesClassifier(
       variances[i] = 1e-50;
 
   probabilities /= data.n_cols;
+  trainingPoints += data.n_cols;
 }
 
 template<typename MatType>
-void NaiveBayesClassifier<MatType>::Classify(const MatType& data,
-                                             arma::Col<size_t>& results)
+template<typename VecType>
+void NaiveBayesClassifier<MatType>::Train(const VecType& point,
+                                          const size_t label)
+{
+  // We must use the incremental algorithm here.
+  probabilities *= trainingPoints;
+  probabilities[label]++;
+
+  arma::vec delta = point - means.col(label);
+  means.col(label) += delta / probabilities[label];
+  if (probabilities[label] > 2)
+    variances.col(label) *= (probabilities[label] - 2);
+  variances.col(label) += (delta % (point - means.col(label)));
+  if (probabilities[label] > 1)
+    variances.col(label) /= probabilities[label] - 1;
+
+  trainingPoints++;
+  probabilities /= trainingPoints;
+}
+
+template<typename MatType>
+template<typename VecType>
+void NaiveBayesClassifier<MatType>::LogLikelihood(
+    const VecType& point,
+    arma::vec& logLikelihoods) const
 {
   // Check that the number of features in the test data is same as in the
   // training data.
-  Log::Assert(data.n_rows == means.n_rows);
+  Log::Assert(point.n_rows == means.n_rows);
 
-  arma::vec probs = arma::log(probabilities);
+  logLikelihoods = arma::log(probabilities);
   arma::mat invVar = 1.0 / variances;
 
-  arma::mat testProbs = arma::repmat(probs.t(), data.n_cols, 1);
-
-  results.set_size(data.n_cols); // No need to fill with anything yet.
-
-  Log::Info << "Running Naive Bayes classifier on " << data.n_cols
-      << " data points with " << data.n_rows << " features each." << std::endl;
-
-  // Calculate the joint probability for each of the data points for each of the
+  // Calculate the joint log likelihood of point for each of the
   // means.n_cols.
 
   // Loop over every class.
@@ -126,31 +183,122 @@ void NaiveBayesClassifier<MatType>::Classify(const MatType& data,
   {
     // This is an adaptation of gmm::phi() for the case where the covariance is
     // a diagonal matrix.
-    arma::mat diffs = data - arma::repmat(means.col(i), 1, data.n_cols);
-    arma::mat rhs = -0.5 * arma::diagmat(invVar.col(i)) * diffs;
-    arma::vec exponents(diffs.n_cols);
-    for (size_t j = 0; j < diffs.n_cols; ++j)
-      exponents(j) = std::exp(arma::accu(diffs.col(j) % rhs.unsafe_col(j)));
+    arma::vec diffs = point - means.col(i);
+    arma::vec rhs = -0.5 * arma::diagmat(invVar.col(i)) * diffs;
+    double exponent = arma::accu(diffs % rhs); // log(exp(value)) == value
 
-    testProbs.col(i) += log(pow(2 * M_PI, (double) data.n_rows / -2.0) *
-        pow(det(arma::diagmat(invVar.col(i))), -0.5) * exponents);
+    // Calculate point log likelihood as sum of logs to decrease floating point
+    // errors.
+    logLikelihoods(i) += (point.n_rows / -2.0 * log(2 * M_PI) - 0.5 *
+        log(arma::det(arma::diagmat(variances.col(i)))) + exponent);
   }
-
-  // Now calculate the label.
-  for (size_t i = 0; i < data.n_cols; ++i)
-  {
-    // Find the index of the class with maximum probability for this point.
-    arma::uword maxIndex = 0;
-    arma::vec pointProbs = testProbs.row(i).t();
-    pointProbs.max(maxIndex);
-
-    results[i] = maxIndex;
-  }
-
-  return;
 }
 
-}; // namespace naive_bayes
-}; // namespace mlpack
+template<typename MatType>
+void NaiveBayesClassifier<MatType>::LogLikelihood(
+    const MatType& data,
+    arma::mat& logLikelihoods) const
+{
+  logLikelihoods.set_size(means.n_cols, data.n_cols);
+  for (size_t i = 0; i < data.n_cols; ++i)
+  {
+    arma::vec v = logLikelihoods.unsafe_col(i);
+    LogLikelihood(data.col(i), v);
+  }
+}
+
+template<typename MatType>
+template<typename VecType>
+size_t NaiveBayesClassifier<MatType>::Classify(const VecType& point) const
+{
+  // Find the label(class) with max log likelihood.
+  arma::vec logLikelihoods;
+  LogLikelihood(point, logLikelihoods);
+
+  arma::uword maxIndex = 0;
+  logLikelihoods.max(maxIndex);
+  return maxIndex;
+}
+
+template<typename MatType>
+template<typename VecType>
+void NaiveBayesClassifier<MatType>::Classify(const VecType& point,
+                                             size_t& prediction,
+                                             arma::vec& probabilities) const
+{
+  // log(Prob(Y|X)) = Log(Prob(X|Y)) + Log(Prob(Y)) - Log(Prob(X));
+  // But LogLikelihood() gives us the unnormalized log likelihood which is
+  // Log(Prob(X|Y)) + Log(Prob(Y)) so we need to subtract the normalization
+  // term.
+  arma::vec logLikelihoods;
+  LogLikelihood(point, logLikelihoods);
+  const double logProbX = log(arma::accu(exp(logLikelihoods))); // Log(Prob(X)).
+  logLikelihoods -= logProbX;
+
+  arma::uword maxIndex = 0;
+  logLikelihoods.max(maxIndex);
+  prediction = (size_t) maxIndex;
+  probabilities = exp(logLikelihoods); // log(exp(value)) == value.
+}
+
+template<typename MatType>
+void NaiveBayesClassifier<MatType>::Classify(
+    const MatType& data,
+    arma::Row<size_t>& predictions) const
+{
+  predictions.set_size(data.n_cols);
+
+  arma::mat logLikelihoods;
+  LogLikelihood(data, logLikelihoods);
+
+  for (size_t i = 0; i < data.n_cols; ++i)
+  {
+    arma::uword maxIndex = 0;
+    logLikelihoods.unsafe_col(i).max(maxIndex);
+    predictions[i] = maxIndex;
+  }
+}
+
+template<typename MatType>
+void NaiveBayesClassifier<MatType>::Classify(
+    const MatType& data,
+    arma::Row<size_t>& predictions,
+    arma::mat& predictionProbs) const
+{
+  predictions.set_size(data.n_cols);
+
+  arma::mat logLikelihoods;
+  LogLikelihood(data, logLikelihoods);
+
+  arma::vec logProbX(data.n_cols); // log(Prob(X)) for each point.
+  for (size_t j = 0; j < data.n_cols; ++j)
+  {
+    logProbX(j) = log(arma::accu(exp(logLikelihoods.col(j))));
+    logLikelihoods.col(j) -= logProbX(j);
+  }
+
+  predictionProbs = arma::exp(logLikelihoods);
+
+  // Now calculate maximum probabilities for each point.
+  for (size_t i = 0; i < data.n_cols; ++i)
+  {
+    arma::uword maxIndex;
+    logLikelihoods.unsafe_col(i).max(maxIndex);
+    predictions[i] = maxIndex;
+  }
+}
+
+template<typename MatType>
+template<typename Archive>
+void NaiveBayesClassifier<MatType>::Serialize(Archive& ar,
+                                              const unsigned int /* version */)
+{
+  ar & data::CreateNVP(means, "means");
+  ar & data::CreateNVP(variances, "variances");
+  ar & data::CreateNVP(probabilities, "probabilities");
+}
+
+} // namespace naive_bayes
+} // namespace mlpack
 
 #endif

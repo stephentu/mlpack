@@ -5,11 +5,16 @@
  * An implementation of Bradley and Fayyad's "Refining Initial Points for
  * K-Means clustering".  This class is meant to provide better initial points
  * for the k-means algorithm.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_KMEANS_REFINED_START_HPP
-#define __MLPACK_METHODS_KMEANS_REFINED_START_HPP
+#ifndef MLPACK_METHODS_KMEANS_REFINED_START_HPP
+#define MLPACK_METHODS_KMEANS_REFINED_START_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace kmeans {
@@ -43,7 +48,23 @@ class RefinedStart
 
   /**
    * Partition the given dataset into the given number of clusters according to
-   * the random sampling scheme outlined in Bradley and Fayyad's paper.
+   * the random sampling scheme outlined in Bradley and Fayyad's paper, and
+   * return centroids.
+   *
+   * @tparam MatType Type of data (arma::mat or arma::sp_mat).
+   * @param data Dataset to partition.
+   * @param clusters Number of clusters to split dataset into.
+   * @param centroids Matrix to store centroids into.
+   */
+  template<typename MatType>
+  void Cluster(const MatType& data,
+               const size_t clusters,
+               arma::mat& centroids) const;
+
+  /**
+   * Partition the given dataset into the given number of clusters according to
+   * the random sampling scheme outlined in Bradley and Fayyad's paper, and
+   * return point assignments.
    *
    * @tparam MatType Type of data (arma::mat or arma::sp_mat).
    * @param data Dataset to partition.
@@ -54,7 +75,7 @@ class RefinedStart
   template<typename MatType>
   void Cluster(const MatType& data,
                const size_t clusters,
-               arma::Col<size_t>& assignments) const;
+               arma::Row<size_t>& assignments) const;
 
   //! Get the number of samplings that will be performed.
   size_t Samplings() const { return samplings; }
@@ -66,6 +87,14 @@ class RefinedStart
   //! Modify the percentage of the data used by each subsampling.
   double& Percentage() { return percentage; }
 
+  //! Serialize the object.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
+  {
+    ar & data::CreateNVP(samplings, "samplings");
+    ar & data::CreateNVP(percentage, "percentage");
+  }
+
  private:
   //! The number of samplings to perform.
   size_t samplings;
@@ -73,8 +102,8 @@ class RefinedStart
   double percentage;
 };
 
-}; // namespace kmeans
-}; // namespace mlpack
+} // namespace kmeans
+} // namespace mlpack
 
 // Include implementation.
 #include "refined_start_impl.hpp"

@@ -5,6 +5,7 @@ set(SOURCES
   nothing_initializer.hpp
   random_initializer.hpp
   sparse_coding.hpp
+  sparse_coding.cpp
   sparse_coding_impl.hpp
 )
 
@@ -14,13 +15,7 @@ foreach(file ${SOURCES})
   set(DIR_SRCS ${DIR_SRCS} ${CMAKE_CURRENT_SOURCE_DIR}/${file})
 endforeach()
 
-# append sources (with directory name) to list of all MLPACK sources (used at the parent scope)
+# append sources (with directory name) to list of all mlpack sources (used at the parent scope)
 set(MLPACK_SRCS ${MLPACK_SRCS} ${DIR_SRCS} PARENT_SCOPE)
 
-add_executable(sparse_coding
-  sparse_coding_main.cpp
-)
-target_link_libraries(sparse_coding
-  mlpack
-)
-install(TARGETS sparse_coding RUNTIME DESTINATION bin)
+add_cli_executable(sparse_coding)

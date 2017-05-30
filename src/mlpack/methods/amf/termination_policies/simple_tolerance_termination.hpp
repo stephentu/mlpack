@@ -3,11 +3,16 @@
  * @author Sumedh Ghaisas
  *
  * Termination policy used in AMF (Alternating Matrix Factorization).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #ifndef _MLPACK_METHODS_AMF_SIMPLE_TOLERANCE_TERMINATION_HPP_INCLUDED
 #define _MLPACK_METHODS_AMF_SIMPLE_TOLERANCE_TERMINATION_HPP_INCLUDED
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace amf {
@@ -15,7 +20,7 @@ namespace amf {
 /**
  * This class implements residue tolerance termination policy. Termination
  * criterion is met when increase in residue value drops below the given tolerance.
- * To accomodate spikes certain number of successive residue drops are accepted.
+ * To accommodate spikes certain number of successive residue drops are accepted.
  * This upper imit on successive drops can be adjusted with reverseStepCount.
  * Secondary termination criterion terminates algorithm when iteration count
  * goes above the threshold.
@@ -78,7 +83,7 @@ class SimpleToleranceTermination
         for(size_t j = 0;j < m;j++)
         {
             double temp = 0;
-            if((temp = (*V)(i,j)) != 0)
+            if ((temp = (*V)(i,j)) != 0)
             {
                 temp = (temp - WH(i, j));
                 temp = temp * temp;
@@ -92,6 +97,8 @@ class SimpleToleranceTermination
 
     // increment iteration count
     iteration++;
+    Log::Info << "Iteration " << iteration << "; residue "
+        << ((residueOld - residue) / residueOld) << ".\n";
 
     // if residue tolerance is not satisfied
     if ((residueOld - residue) / residueOld < tolerance && iteration > 4)
@@ -116,18 +123,18 @@ class SimpleToleranceTermination
       // initialize successive drop count
       reverseStepCount = 0;
       // if residue is droped below minimum scrap stored values
-      if(residue <= c_indexOld && isCopy == true)
+      if (residue <= c_indexOld && isCopy == true)
       {
         isCopy = false;
       }
     }
 
     // check if termination criterion is met
-    if(reverseStepCount == reverseStepTolerance || iteration > maxIterations)
+    if (reverseStepCount == reverseStepTolerance || iteration > maxIterations)
     {
       // if stored values are present replace them with current value as they
       // represent the minimum residue point
-      if(isCopy)
+      if (isCopy)
       {
         W = this->W;
         H = this->H;
@@ -185,8 +192,8 @@ class SimpleToleranceTermination
   double c_index;
 }; // class SimpleToleranceTermination
 
-}; // namespace amf
-}; // namespace mlpack
+} // namespace amf
+} // namespace mlpack
 
 #endif // _MLPACK_METHODS_AMF_SIMPLE_TOLERANCE_TERMINATION_HPP_INCLUDED
 

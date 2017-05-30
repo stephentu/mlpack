@@ -4,21 +4,16 @@
  * @author Matthew Amidon
  *
  * Declaration of the PrefixedOutStream class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_UTIL_PREFIXEDOUTSTREAM_HPP
-#define __MLPACK_CORE_UTIL_PREFIXEDOUTSTREAM_HPP
+#ifndef MLPACK_CORE_UTIL_PREFIXEDOUTSTREAM_HPP
+#define MLPACK_CORE_UTIL_PREFIXEDOUTSTREAM_HPP
 
-#include <iostream>
-#include <iomanip>
-#include <string>
-#include <streambuf>
-
-#include <boost/lexical_cast.hpp>
-#include <boost/utility/enable_if.hpp>
-#include <boost/type_traits.hpp>
-
-#include <mlpack/core/util/sfinae_utility.hpp>
-#include <mlpack/core/util/string_util.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace util {
@@ -56,8 +51,9 @@ class PrefixedOutStream
    *
    * @param destination ostream which receives output from this object.
    * @param prefix The prefix to prepend to each line.
-   * @param ignoreInput if true the stream will not be printed
-   * @param fatal is true program will exit after printing a line
+   * @param ignoreInput If true, the stream will not be printed.
+   * @param fatal If true, a std::runtime_error exception is thrown after
+   *     printing a newline.
    */
   PrefixedOutStream(std::ostream& destination,
                     const char* prefix,
@@ -111,51 +107,40 @@ class PrefixedOutStream
   template<typename T>
   PrefixedOutStream& operator<<(const T& s);
 
-  //! The output stream that all data is to be sent too; example: std::cout.
+  //! The output stream that all data is to be sent to; example: std::cout.
   std::ostream& destination;
 
   //! Discards input, prints nothing if true.
   bool ignoreInput;
 
  private:
-  HAS_MEM_FUNC(ToString, HasToString)
-
-  //! This handles forwarding all primitive types transparently
-  template<typename T>
-  void CallBaseLogic(const T& s,
-      typename boost::disable_if<
-          boost::is_class<T>
-      >::type* = 0);
-
-  //! Forward all objects that do not implement a ToString() method
-  template<typename T>
-  void CallBaseLogic(const T& s,
-      typename boost::enable_if<
-          boost::is_class<T>
-      >::type* = 0,
-      typename boost::disable_if<
-          HasToString<T, std::string(T::*)() const>
-      >::type* = 0);
-
-  //! Call ToString() on all objects that implement ToString() before forwarding
-  template<typename T>
-  void CallBaseLogic(const T& s,
-      typename boost::enable_if<
-          boost::is_class<T>
-      >::type* = 0,
-      typename boost::enable_if<
-          HasToString<T, std::string(T::*)() const>
-      >::type* = 0);
-
   /**
-   * @brief Conducts the base logic required in all the operator << overloads.
-   *   Mostly just a good idea to reduce copy-pasta.
+   * Conducts the base logic required in all the operator << overloads.  Mostly
+   * just a good idea to reduce copy-pasta.
+   *
+   * This overload is for non-Armadillo objects, which need special handling
+   * during printing.
    *
    * @tparam T The type of the data to output.
    * @param val The The data to be output.
    */
   template<typename T>
-  void BaseLogic(const T& val);
+  typename std::enable_if<!arma::is_arma_type<T>::value>::type
+  BaseLogic(const T& val);
+
+  /**
+   * Conducts the base logic required in all the operator << overloads.  Mostly
+   * just a good idea to reduce copy-pasta.
+   *
+   * This overload is for Armadillo objects, which need special handling during
+   * printing.
+   *
+   * @tparam T The type of the data to output.
+   * @param val The The data to be output.
+   */
+  template<typename T>
+  typename std::enable_if<arma::is_arma_type<T>::value>::type
+  BaseLogic(const T& val);
 
   /**
    * Output the prefix, but only if we need to and if we are allowed to.
@@ -169,13 +154,13 @@ class PrefixedOutStream
   //! will be necessary.
   bool carriageReturned;
 
-  //! If true, the application will terminate with an error code when a CR is
+  //! If true, a std::runtime_error exception will be thrown when a CR is
   //! encountered.
   bool fatal;
 };
 
-}; // namespace util
-}; // namespace mlpack
+} // namespace util
+} // namespace mlpack
 
 // Template definitions.
 #include "prefixedoutstream_impl.hpp"

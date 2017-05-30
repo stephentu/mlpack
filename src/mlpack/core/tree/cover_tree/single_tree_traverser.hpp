@@ -5,20 +5,31 @@
  * Defines the SingleTreeTraverser for the cover tree.  This implements a
  * single-tree breadth-first recursion with a pruning rule and a base case (two
  * point) rule.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_TREE_COVER_TREE_SINGLE_TREE_TRAVERSER_HPP
-#define __MLPACK_CORE_TREE_COVER_TREE_SINGLE_TREE_TRAVERSER_HPP
+#ifndef MLPACK_CORE_TREE_COVER_TREE_SINGLE_TREE_TRAVERSER_HPP
+#define MLPACK_CORE_TREE_COVER_TREE_SINGLE_TREE_TRAVERSER_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 #include "cover_tree.hpp"
 
 namespace mlpack {
 namespace tree {
 
-template<typename MetricType, typename RootPointPolicy, typename StatisticType>
+template<
+    typename MetricType,
+    typename StatisticType,
+    typename MatType,
+    typename RootPointPolicy
+>
 template<typename RuleType>
-class CoverTree<MetricType, RootPointPolicy, StatisticType>::SingleTreeTraverser
+class CoverTree<MetricType, StatisticType, MatType, RootPointPolicy>::
+    SingleTreeTraverser
 {
  public:
   /**
@@ -48,8 +59,8 @@ class CoverTree<MetricType, RootPointPolicy, StatisticType>::SingleTreeTraverser
   size_t numPrunes;
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 // Include implementation.
 #include "single_tree_traverser_impl.hpp"

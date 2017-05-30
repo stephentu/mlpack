@@ -1,13 +1,13 @@
-/*! @page timer MLPACK Timers
+/*! @page timer mlpack Timers
 
 @section timerintro Introduction
 
-MLPACK provides a simple timer interface for the timing of machine learning
+mlpack provides a simple timer interface for the timing of machine learning
 methods.  The results of any timers used during the program are displayed at
 output by the mlpack::CLI object, when --verbose is given:
 
 @code
-$ allknn -r dataset.csv -n neighbors_out.csv -d distances_out.csv -k 5 -v
+$ mlpack_knn -r dataset.csv -n neighbors_out.csv -d distances_out.csv -k 5 -v
 <...>
 [INFO ] Program timers:
 [INFO ]   computing_neighbors: 0.010650s
@@ -30,9 +30,10 @@ timeval Timer::Get(const char* name);
 Each timer is given a name, and is referenced by that name.  You can call \c
 Timer::Start() and \c Timer::Stop() multiple times for a particular timer name,
 and the result will be the sum of the runs of the timer.  Note that \c
-Timer::Stop() must be called before \c Timer::Start() is called again.
+Timer::Stop() must be called before \c Timer::Start() is called again,
+otherwise a std::runtime_error exception will be thrown.
 
-A "total_time" timer is run by default for each MLPACK program.
+A "total_time" timer is run by default for each mlpack program.
 
 @section example Timer Example
 

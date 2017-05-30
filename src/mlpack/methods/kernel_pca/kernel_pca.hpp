@@ -5,11 +5,16 @@
  *
  * Defines the KernelPCA class to perform Kernel Principal Components Analysis
  * on the specified data set.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_KERNEL_PCA_KERNEL_PCA_HPP
-#define __MLPACK_METHODS_KERNEL_PCA_KERNEL_PCA_HPP
+#ifndef MLPACK_METHODS_KERNEL_PCA_KERNEL_PCA_HPP
+#define MLPACK_METHODS_KERNEL_PCA_KERNEL_PCA_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/methods/kernel_pca/kernel_rules/naive_method.hpp>
 
 namespace mlpack {
@@ -111,9 +116,6 @@ class KernelPCA
   //! Return whether or not the transformed data is centered.
   bool& CenterTransformedData() { return centerTransformedData; }
 
-  // Returns a string representation of this object.
-  std::string ToString() const;
-
  private:
   //! The instantiated kernel.
   KernelType kernel;
@@ -123,10 +125,10 @@ class KernelPCA
 
 }; // class KernelPCA
 
-}; // namespace kpca
-}; // namespace mlpack
+} // namespace kpca
+} // namespace mlpack
 
 // Include implementation.
 #include "kernel_pca_impl.hpp"
 
-#endif // __MLPACK_METHODS_KERNEL_PCA_KERNEL_PCA_HPP
+#endif // MLPACK_METHODS_KERNEL_PCA_KERNEL_PCA_HPP

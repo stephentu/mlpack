@@ -1,6 +1,11 @@
 /**
  * @file kmeans_test.cpp
  * @author Ryan Curtin
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #include <mlpack/core.hpp>
 
@@ -10,14 +15,15 @@
 #include <mlpack/methods/kmeans/elkan_kmeans.hpp>
 #include <mlpack/methods/kmeans/hamerly_kmeans.hpp>
 #include <mlpack/methods/kmeans/pelleg_moore_kmeans.hpp>
-#include <mlpack/methods/kmeans/dtnn_kmeans.hpp>
 #include <mlpack/methods/kmeans/dual_tree_kmeans.hpp>
+#include <mlpack/methods/kmeans/sample_initialization.hpp>
+#include <mlpack/methods/kmeans/random_partition.hpp>
 
 #include <mlpack/core/tree/cover_tree/cover_tree.hpp>
 #include <mlpack/methods/neighbor_search/neighbor_search.hpp>
 
 #include <boost/test/unit_test.hpp>
-#include "old_boost_test_definitions.hpp"
+#include "test_tools.hpp"
 
 using namespace mlpack;
 using namespace mlpack::kmeans;
@@ -64,9 +70,11 @@ arma::mat kMeansData("  0.0   0.0;" // Class 1.
  */
 BOOST_AUTO_TEST_CASE(KMeansSimpleTest)
 {
-  KMeans<> kmeans;
+  // This test was originally written to use RandomPartition, and is left that
+  // way because RandomPartition gives better initializations here.
+  KMeans<EuclideanDistance, RandomPartition> kmeans;
 
-  arma::Col<size_t> assignments;
+  arma::Row<size_t> assignments;
   kmeans.Cluster((arma::mat) trans(kMeansData), 3, assignments);
 
   // Now make sure we got it all right.  There is no restriction on how the
@@ -99,9 +107,9 @@ BOOST_AUTO_TEST_CASE(KMeansSimpleTest)
  */
 BOOST_AUTO_TEST_CASE(AllowEmptyClusterTest)
 {
-  arma::Col<size_t> assignments;
+  arma::Row<size_t> assignments;
   assignments.randu(30);
-  arma::Col<size_t> assignmentsOld = assignments;
+  arma::Row<size_t> assignmentsOld = assignments;
 
   arma::mat centroids;
   centroids.randu(30, 3); // This doesn't matter.
@@ -115,7 +123,7 @@ BOOST_AUTO_TEST_CASE(AllowEmptyClusterTest)
   // Make sure the method doesn't modify any points.
   metric::LMetric<2, true> metric;
   BOOST_REQUIRE_EQUAL(AllowEmptyClusters::EmptyCluster(kMeansData, 2, centroids,
-      counts, metric), 0);
+      centroids, counts, metric, 0), 0);
 
   // Make sure no assignments were changed.
   for (size_t i = 0; i < assignments.n_elem; i++)
@@ -136,7 +144,7 @@ BOOST_AUTO_TEST_CASE(MaxVarianceNewClusterTest)
                  "1.0 0.8 0.7  5.1  5.2;");
 
   // Point 2 is the mis-clustered point we're looking for to be moved.
-  arma::Col<size_t> assignments("0 0 0 1 1");
+  arma::Row<size_t> assignments("0 0 0 1 1");
 
   arma::mat centroids(2, 3);
   centroids.col(0) = (1.0 / 3.0) * (data.col(0) + data.col(1) + data.col(2));
@@ -149,8 +157,9 @@ BOOST_AUTO_TEST_CASE(MaxVarianceNewClusterTest)
   metric::LMetric<2, true> metric;
 
   // This should only change one point.
-  BOOST_REQUIRE_EQUAL(MaxVarianceNewCluster::EmptyCluster(data, 2, centroids,
-      counts, metric), 1);
+  MaxVarianceNewCluster mvnc;
+  BOOST_REQUIRE_EQUAL(mvnc.EmptyCluster(data, 2, centroids, centroids, counts,
+      metric, 0), 1);
 
   // Add the variance of each point's distance away from the cluster.  I think
   // this is the sensible thing to do.
@@ -194,7 +203,7 @@ BOOST_AUTO_TEST_CASE(RandomPartitionTest)
   arma::mat data;
   data.randu(2, 1000); // One thousand points.
 
-  arma::Col<size_t> assignments;
+  arma::Row<size_t> assignments;
 
   // We'll ask for 18 clusters (arbitrary).
   RandomPartition::Cluster(data, 18, assignments);
@@ -234,7 +243,7 @@ BOOST_AUTO_TEST_CASE(RandomInitialAssignmentFailureTest)
   for (size_t run = 0; run < 15; ++run)
   {
     arma::mat centroids;
-    arma::Col<size_t> assignments;
+    arma::Row<size_t> assignments;
     KMeans<> kmeans;
     kmeans.Cluster(dataset, 2, assignments, centroids);
 
@@ -265,7 +274,7 @@ BOOST_AUTO_TEST_CASE(InitialAssignmentTest)
 
   // Now, if we specify initial assignments, the algorithm should converge (with
   // zero iterations, actually, because this is the solution).
-  arma::Col<size_t> assignments(10002);
+  arma::Row<size_t> assignments(10002);
   assignments.fill(0);
   assignments[10000] = 1;
   assignments[10001] = 1;
@@ -307,7 +316,7 @@ BOOST_AUTO_TEST_CASE(InitialCentroidTest)
   for (size_t i = 0; i < 2; ++i)
     dataset.col(10000 + i) += arma::vec("50 50");
 
-  arma::Col<size_t> assignments;
+  arma::Row<size_t> assignments;
   arma::mat centroids(2, 2);
 
   centroids.col(0) = arma::vec("0 0");
@@ -349,7 +358,7 @@ BOOST_AUTO_TEST_CASE(InitialAssignmentOverrideTest)
   for (size_t i = 0; i < 2; ++i)
     dataset.col(10000 + i) += arma::vec("50 50");
 
-  arma::Col<size_t> assignments(10002);
+  arma::Row<size_t> assignments(10002);
   assignments.fill(0);
   assignments[10000] = 1;
   assignments[10001] = 1;
@@ -386,7 +395,6 @@ BOOST_AUTO_TEST_CASE(RefinedStartTest)
   // Our dataset will be five Gaussians of largely varying numbers of points and
   // we expect that the refined starting policy should return good guesses at
   // what these Gaussians are.
-  math::RandomSeed(std::time(NULL));
   arma::mat data(3, 3000);
   data.randn();
 
@@ -411,7 +419,7 @@ BOOST_AUTO_TEST_CASE(RefinedStartTest)
   // Now run the RefinedStart algorithm and make sure it doesn't deviate too
   // much from the actual solution.
   RefinedStart rs;
-  arma::Col<size_t> assignments;
+  arma::Row<size_t> assignments;
   arma::mat resultingCentroids;
   rs.Cluster(data, 5, assignments);
 
@@ -468,7 +476,7 @@ BOOST_AUTO_TEST_CASE(SparseKMeansTest)
   data(1402, 10) = -3.5;
   data(1402, 11) = -3.0;
 
-  arma::Col<size_t> assignments;
+  arma::Row<size_t> assignments;
 
   KMeans<metric::EuclideanDistance, RandomPartition, MaxVarianceNewCluster,
          NaiveKMeans, arma::sp_mat> kmeans; // Default options.
@@ -512,12 +520,12 @@ BOOST_AUTO_TEST_CASE(ElkanTest)
     // clusters.
     arma::mat naiveCentroids(centroids);
     KMeans<> km;
-    arma::Col<size_t> assignments;
+    arma::Row<size_t> assignments;
     km.Cluster(dataset, k, assignments, naiveCentroids, false, true);
 
     KMeans<metric::EuclideanDistance, RandomPartition, MaxVarianceNewCluster,
          ElkanKMeans> elkan;
-    arma::Col<size_t> elkanAssignments;
+    arma::Row<size_t> elkanAssignments;
     arma::mat elkanCentroids(centroids);
     elkan.Cluster(dataset, k, elkanAssignments, elkanCentroids, false, true);
 
@@ -546,12 +554,12 @@ BOOST_AUTO_TEST_CASE(HamerlyTest)
     // clusters.
     arma::mat naiveCentroids(centroids);
     KMeans<> km;
-    arma::Col<size_t> assignments;
+    arma::Row<size_t> assignments;
     km.Cluster(dataset, k, assignments, naiveCentroids, false, true);
 
     KMeans<metric::EuclideanDistance, RandomPartition, MaxVarianceNewCluster,
         HamerlyKMeans> hamerly;
-    arma::Col<size_t> hamerlyAssignments;
+    arma::Row<size_t> hamerlyAssignments;
     arma::mat hamerlyCentroids(centroids);
     hamerly.Cluster(dataset, k, hamerlyAssignments, hamerlyCentroids, false,
         true);
@@ -581,12 +589,12 @@ BOOST_AUTO_TEST_CASE(PellegMooreTest)
     // clusters.
     arma::mat naiveCentroids(centroids);
     KMeans<> km;
-    arma::Col<size_t> assignments;
+    arma::Row<size_t> assignments;
     km.Cluster(dataset, k, assignments, naiveCentroids, false, true);
 
     KMeans<metric::EuclideanDistance, RandomPartition, MaxVarianceNewCluster,
         PellegMooreKMeans> pellegMoore;
-    arma::Col<size_t> pmAssignments;
+    arma::Row<size_t> pmAssignments;
     arma::mat pmCentroids(centroids);
     pellegMoore.Cluster(dataset, k, pmAssignments, pmCentroids, false, true);
 
@@ -613,12 +621,12 @@ BOOST_AUTO_TEST_CASE(DTNNTest)
 
     arma::mat naiveCentroids(centroids);
     KMeans<> km;
-    arma::Col<size_t> assignments;
+    arma::Row<size_t> assignments;
     km.Cluster(dataset, k, assignments, naiveCentroids, false, true);
 
     KMeans<metric::EuclideanDistance, RandomPartition, MaxVarianceNewCluster,
-        DefaultDTNNKMeans> dtnn;
-    arma::Col<size_t> dtnnAssignments;
+        DefaultDualTreeKMeans> dtnn;
+    arma::Row<size_t> dtnnAssignments;
     arma::mat dtnnCentroids(centroids);
     dtnn.Cluster(dataset, k, dtnnAssignments, dtnnCentroids, false, true);
 
@@ -632,10 +640,10 @@ BOOST_AUTO_TEST_CASE(DTNNTest)
 
 BOOST_AUTO_TEST_CASE(DTNNCoverTreeTest)
 {
-//  const size_t trials = 5;
+  const size_t trials = 5;
 
-//  for (size_t t = 0; t < trials; ++t)
-//  {
+  for (size_t t = 0; t < trials; ++t)
+  {
     arma::mat dataset(10, 1000);
     dataset.randu();
 
@@ -645,46 +653,12 @@ BOOST_AUTO_TEST_CASE(DTNNCoverTreeTest)
 
     arma::mat naiveCentroids(centroids);
     KMeans<> km;
-    arma::Col<size_t> assignments;
+    arma::Row<size_t> assignments;
     km.Cluster(dataset, k, assignments, naiveCentroids, false, true);
 
     KMeans<metric::EuclideanDistance, RandomPartition, MaxVarianceNewCluster,
-        CoverTreeDTNNKMeans> dtnn;
-/*    arma::Col<size_t> dtnnAssignments;
-    arma::mat dtnnCentroids(centroids);
-    dtnn.Cluster(dataset, k, dtnnAssignments, dtnnCentroids, false, true);
-
-    for (size_t i = 0; i < dataset.n_cols; ++i)
-      BOOST_REQUIRE_EQUAL(assignments[i], dtnnAssignments[i]);
-
-    for (size_t i = 0; i < centroids.n_elem; ++i)
-      BOOST_REQUIRE_CLOSE(naiveCentroids[i], dtnnCentroids[i], 1e-5);
-  }
-*/
-}
-
-/*
-BOOST_AUTO_TEST_CASE(DualTreeKMeansTest)
-{
-  const size_t trials = 5;
-
-  for (size_t t = 0; t < trials; ++t)
-  {
-    arma::mat dataset(10, 1000);
-    dataset.randu();
-
-    const size_t k = 5 * (t + 1);
-    arma::mat centroids(10, k);
-    centroids.randu();
-
-    arma::mat naiveCentroids(centroids);
-    KMeans<> km;
-    arma::Col<size_t> assignments;
-    km.Cluster(dataset, k, assignments, naiveCentroids, false, true);
-
-    KMeans<metric::EuclideanDistance, RandomPartition, MaxVarianceNewCluster,
-        DefaultDualTreeKMeans> dtnn;
-    arma::Col<size_t> dtnnAssignments;
+        CoverTreeDualTreeKMeans> dtnn;
+    arma::Row<size_t> dtnnAssignments;
     arma::mat dtnnCentroids(centroids);
     dtnn.Cluster(dataset, k, dtnnAssignments, dtnnCentroids, false, true);
 
@@ -696,383 +670,38 @@ BOOST_AUTO_TEST_CASE(DualTreeKMeansTest)
   }
 }
 
-BOOST_AUTO_TEST_CASE(DualTreeKMeansBaseCaseTest)
+/**
+ * Make sure that the sample initialization strategy successfully samples points
+ * from the dataset.
+ */
+BOOST_AUTO_TEST_CASE(SampleInitializationTest)
 {
-  // If we run BaseCase() on all the points, do we get valid results?
-  const size_t points = 1000;
-  const size_t clusters = 5;
-  arma::mat dataset(5, points);
-  dataset.randu();
-  arma::mat centroids(5, clusters);
-  centroids.randu();
+  arma::mat dataset = arma::randu<arma::mat>(5, 100);
+  const size_t clusters = 10;
+  arma::mat centroids;
 
-  // Create the Rules object.
-  arma::Col<size_t> assignments(points);
-  arma::vec upperBounds(points);
-  arma::vec lowerBounds(points);
-  upperBounds.fill(DBL_MAX);
-  lowerBounds.fill(DBL_MAX);
-  std::vector<bool> visited(points, false); // Fill with false.
-  std::vector<size_t> oldFromNewCentroids(clusters);
+  SampleInitialization::Cluster(dataset, clusters, centroids);
+
+  // Check that the size of the matrix is correct.
+  BOOST_REQUIRE_EQUAL(centroids.n_cols, 10);
+  BOOST_REQUIRE_EQUAL(centroids.n_rows, 5);
+
+  // Check that each entry in the matrix is some sample from the dataset.
   for (size_t i = 0; i < clusters; ++i)
-    oldFromNewCentroids[i] = i;
-  std::vector<bool> prunedPoints(points, false); // Fill with false.
-
-  EuclideanDistance e;
-  DTNNKMeansRules<EuclideanDistance, BinarySpaceTree<HRectBound<2>,
-      EuclideanDistance, DTNNStatistic> > rules(centroids, dataset,
-      assignments, upperBounds, lowerBounds, e, prunedPoints,
-      oldFromNewCentroids, visited);
-
-  for (size_t i = 0; i < points; ++i)
   {
-    for (size_t j = 0; j < clusters; ++j)
+    // If the loop successfully terminates, j will be equal to dataset.n_cols.
+    // If not then we have found a match.
+    size_t j;
+    for (j = 0; j < dataset.n_cols; ++j)
     {
-      rules.BaseCase(i, j);
+      const double distance = metric::EuclideanDistance::Evaluate(
+          centroids.col(i), dataset.col(j));
+      if (distance < 1e-10)
+        break;
     }
-  }
 
-  // Now, run nearest neighbors to establish true bounds.
-  neighbor::AllkNN allknn(centroids, dataset);
-  arma::Mat<size_t> trueAssignments;
-  arma::mat trueDistances;
-  allknn.Search(2, trueAssignments, trueDistances);
-
-  for (size_t i = 0; i < points; ++i)
-  {
-    BOOST_REQUIRE_GE(upperBounds[i], trueDistances(0, i));
-    BOOST_REQUIRE_LE(lowerBounds[i], trueDistances(1, i));
-    BOOST_REQUIRE_EQUAL(assignments[i], trueAssignments(0, i));
+    BOOST_REQUIRE_LT(j, dataset.n_cols);
   }
 }
-
-BOOST_AUTO_TEST_CASE(DualTreeKMeansScoreKDTreeOneLeafTest)
-{
-  // If we run a dual-tree algorithm, do we get valid results for each point
-  // and/or node when we use the kd-tree with a leaf size of one?
-  const size_t points = 5000;
-  const size_t clusters = 100;
-  arma::mat dataset(5, points);
-  dataset.randu();
-  arma::mat centroids(5, clusters);
-  centroids.randu();
-
-  arma::mat datasetCopy(dataset);
-  arma::mat centroidsCopy(centroids);
-
-  // Create the trees.
-  typedef BinarySpaceTree<HRectBound<2>, DTNNStatistic> TreeType;
-  TreeType pointTree(dataset, 1);
-  TreeType centroidTree(centroids, 1);
-
-  // Create the Rules object.
-  arma::Col<size_t> assignments(points);
-  arma::vec upperBounds(points);
-  arma::vec lowerBounds(points);
-  upperBounds.fill(DBL_MAX);
-  lowerBounds.fill(DBL_MAX);
-  std::vector<bool> visited(points, false); // Fill with false.
-  std::vector<size_t> oldFromNewCentroids(clusters);
-  for (size_t i = 0; i < clusters; ++i)
-    oldFromNewCentroids[i] = i;
-  std::vector<bool> prunedPoints(points, false); // Fill with false.
-
-  EuclideanDistance e;
-  typedef DTNNKMeansRules<EuclideanDistance, TreeType> RuleType;
-  RuleType rules(centroids, dataset, assignments, upperBounds, lowerBounds, e,
-      prunedPoints, oldFromNewCentroids, visited);
-
-  // Now create the traverser.
-  typename TreeType::template BreadthFirstDualTreeTraverser<RuleType>
-      traverser(rules);
-
-  pointTree.Stat().Pruned() = 0;
-  traverser.Traverse(pointTree, centroidTree);
-
-  // Get true bounds.
-  AllkNN allknn(centroids, dataset);
-
-  arma::Mat<size_t> trueAssignments;
-  arma::mat trueDistances;
-  allknn.Search(2, trueAssignments, trueDistances);
-
-  // Check the points first.  Lots of weird mappings have to go on in this stage
-  // because the tree building procedure changed all the points around.
-  for (size_t i = 0; i < dataset.n_cols; ++i)
-  {
-    if (visited[i])
-    {
-      BOOST_REQUIRE_GE(upperBounds[i], trueDistances(0, i));
-      BOOST_REQUIRE_EQUAL(assignments[i], trueAssignments(0, i));
-    }
-  }
-
-  // Now traverse the tree to see if it is correct.
-  std::queue<TreeType*> nodeQueue;
-  nodeQueue.push(&pointTree);
-  while (!nodeQueue.empty())
-  {
-    // This is an expensive operation.  We must ensure that the upper bound is
-    // valid and that the lower bound is valid.  Both can be needlessly loose,
-    // but that will simply affect the pruning of the method, not the
-    // correctness.  Here we care about correctness.
-    TreeType* node = nodeQueue.front();
-    nodeQueue.pop();
-
-    // We must make sure the upper bound and lower bound are both valid for all
-    // descendant points.  The lower bound only matters if the node was pruned.
-    // So, we must calculate the upper and lower bounds manually for the
-    // descendants.
-    double exactUpperBound = 0.0;
-    double exactLowerBound = DBL_MAX;
-    for (size_t i = 0; i < node->NumDescendants(); ++i)
-    {
-      if (trueDistances(0, node->Descendant(i)) > exactUpperBound)
-        exactUpperBound = trueDistances(0, node->Descendant(i));
-      if (trueDistances(1, node->Descendant(i)) < exactLowerBound)
-        exactLowerBound = trueDistances(1, node->Descendant(i));
-    }
-
-    // Multiplication is to add some tolerance for floating point discrepancies.
-    BOOST_REQUIRE_GE(node->Stat().UpperBound() * 1.000001, exactUpperBound);
-
-    if (node->Stat().Pruned() == centroids.n_cols)
-    {
-      BOOST_REQUIRE_LE(node->Stat().LowerBound() * 0.99999, exactLowerBound);
-    }
-    else
-    {
-      for (size_t i = 0; i < node->NumPoints(); ++i)
-      {
-        const double bestLower = std::min(node->Stat().LowerBound(),
-            lowerBounds[node->Point(i)]);
-        BOOST_REQUIRE_LE(bestLower * 0.99999, trueDistances(1, node->Point(i)));
-      }
-
-      // Recurse.
-      for (size_t i = 0; i < node->NumChildren(); ++i)
-        nodeQueue.push(&node->Child(i));
-    }
-  }
-}
-
-BOOST_AUTO_TEST_CASE(DualTreeKMeansScoreKDTreeTest)
-{
-  // If we run a dual-tree algorithm, do we get valid results for each point
-  // and/or node when we use the kd-tree with the default leaf size?
-  const size_t points = 5000;
-  const size_t clusters = 100;
-  arma::mat dataset(5, points);
-  dataset.randu();
-  arma::mat centroids(5, clusters);
-  centroids.randu();
-
-  arma::mat datasetCopy(dataset);
-  arma::mat centroidsCopy(centroids);
-
-  // Create the trees.
-  typedef BinarySpaceTree<HRectBound<2>, DTNNStatistic> TreeType;
-  TreeType pointTree(dataset);
-  TreeType centroidTree(centroids);
-
-  // Create the Rules object.
-  arma::Col<size_t> assignments(points);
-  arma::vec upperBounds(points);
-  arma::vec lowerBounds(points);
-  upperBounds.fill(DBL_MAX);
-  lowerBounds.fill(DBL_MAX);
-  std::vector<bool> visited(points, false); // Fill with false.
-  std::vector<size_t> oldFromNewCentroids(clusters);
-  for (size_t i = 0; i < clusters; ++i)
-    oldFromNewCentroids[i] = i;
-  std::vector<bool> prunedPoints(points, false); // Fill with false.
-
-  EuclideanDistance e;
-  typedef DTNNKMeansRules<EuclideanDistance, TreeType> RuleType;
-  RuleType rules(centroids, dataset, assignments, upperBounds, lowerBounds, e,
-      prunedPoints, oldFromNewCentroids, visited);
-
-  // Now create the traverser.
-  typename TreeType::template BreadthFirstDualTreeTraverser<RuleType>
-      traverser(rules);
-
-  pointTree.Stat().Pruned() = 0;
-  traverser.Traverse(pointTree, centroidTree);
-
-  // Get true bounds.
-  AllkNN allknn(centroids, dataset);
-
-  arma::Mat<size_t> trueAssignments;
-  arma::mat trueDistances;
-  allknn.Search(2, trueAssignments, trueDistances);
-
-  // Check the points first.  Lots of weird mappings have to go on in this stage
-  // because the tree building procedure changed all the points around.
-  for (size_t i = 0; i < dataset.n_cols; ++i)
-  {
-    if (visited[i])
-    {
-      BOOST_REQUIRE_GE(upperBounds[i], trueDistances(0, i));
-      BOOST_REQUIRE_EQUAL(assignments[i], trueAssignments(0, i));
-    }
-  }
-
-  // Now traverse the tree to see if it is correct.
-  std::queue<TreeType*> nodeQueue;
-  nodeQueue.push(&pointTree);
-  while (!nodeQueue.empty())
-  {
-    // This is an expensive operation.  We must ensure that the upper bound is
-    // valid and that the lower bound is valid.  Both can be needlessly loose,
-    // but that will simply affect the pruning of the method, not the
-    // correctness.  Here we care about correctness.
-    TreeType* node = nodeQueue.front();
-    nodeQueue.pop();
-
-    // We must make sure the upper bound and lower bound are both valid for all
-    // descendant points.  The lower bound only matters if the node was pruned.
-    // So, we must calculate the upper and lower bounds manually for the
-    // descendants.
-    double exactUpperBound = 0.0;
-    double exactLowerBound = DBL_MAX;
-    for (size_t i = 0; i < node->NumDescendants(); ++i)
-    {
-      if (trueDistances(0, node->Descendant(i)) > exactUpperBound)
-        exactUpperBound = trueDistances(0, node->Descendant(i));
-      if (trueDistances(1, node->Descendant(i)) < exactLowerBound)
-        exactLowerBound = trueDistances(1, node->Descendant(i));
-    }
-
-    // Multiplication is to add some tolerance for floating point discrepancies.
-    BOOST_REQUIRE_GE(node->Stat().UpperBound() * 1.000001, exactUpperBound);
-
-    if (node->Stat().Pruned() == centroids.n_cols)
-    {
-      BOOST_REQUIRE_LE(node->Stat().LowerBound() * 0.99999, exactLowerBound);
-    }
-    else
-    {
-      for (size_t i = 0; i < node->NumPoints(); ++i)
-      {
-        const double bestLower = std::min(node->Stat().LowerBound(),
-            lowerBounds[node->Point(i)]);
-        BOOST_REQUIRE_LE(bestLower * 0.99999, trueDistances(1, node->Point(i)));
-      }
-
-      // Recurse.
-      for (size_t i = 0; i < node->NumChildren(); ++i)
-        nodeQueue.push(&node->Child(i));
-    }
-  }
-}
-
-BOOST_AUTO_TEST_CASE(DualTreeKMeansScoreCoverTreeTest)
-{
-  // If we run a dual-tree algorithm, do we get valid results for each point
-  // and/or node when we use the kd-tree with the default leaf size?
-  const size_t points = 5000;
-  const size_t clusters = 100;
-  arma::mat dataset(5, points);
-  dataset.randu();
-  arma::mat centroids(5, clusters);
-  centroids.randu();
-
-  arma::mat datasetCopy(dataset);
-  arma::mat centroidsCopy(centroids);
-
-  // Create the trees.
-  typedef CoverTree<EuclideanDistance, FirstPointIsRoot, DTNNStatistic>
-      TreeType;
-  TreeType pointTree(dataset);
-  TreeType centroidTree(centroids);
-
-  // Create the Rules object.
-  arma::Col<size_t> assignments(points);
-  arma::vec upperBounds(points);
-  arma::vec lowerBounds(points);
-  upperBounds.fill(DBL_MAX);
-  lowerBounds.fill(DBL_MAX);
-  std::vector<bool> visited(points, false); // Fill with false.
-  std::vector<size_t> oldFromNewCentroids; // Not used.
-  std::vector<bool> prunedPoints(points, false); // Fill with false.
-
-  EuclideanDistance e;
-  typedef DTNNKMeansRules<EuclideanDistance, TreeType> RuleType;
-  RuleType rules(centroids, dataset, assignments, upperBounds, lowerBounds, e,
-      prunedPoints, oldFromNewCentroids, visited);
-
-  // Now create the traverser.
-  typename TreeType::template DualTreeTraverser<RuleType> traverser(rules);
-
-  pointTree.Stat().Pruned() = 0;
-  traverser.Traverse(pointTree, centroidTree);
-
-  // Get true bounds.
-  AllkNN allknn(centroids, dataset);
-
-  arma::Mat<size_t> trueAssignments;
-  arma::mat trueDistances;
-  allknn.Search(2, trueAssignments, trueDistances);
-
-  // Check the points first.  Lots of weird mappings have to go on in this stage
-  // because the tree building procedure changed all the points around.
-  for (size_t i = 0; i < dataset.n_cols; ++i)
-  {
-    if (visited[i])
-    {
-      BOOST_REQUIRE_GE(upperBounds[i], trueDistances(0, i));
-      BOOST_REQUIRE_EQUAL(assignments[i], trueAssignments(0, i));
-    }
-  }
-
-  // Now traverse the tree to see if it is correct.
-  std::queue<TreeType*> nodeQueue;
-  nodeQueue.push(&pointTree);
-  while (!nodeQueue.empty())
-  {
-    // This is an expensive operation.  We must ensure that the upper bound is
-    // valid and that the lower bound is valid.  Both can be needlessly loose,
-    // but that will simply affect the pruning of the method, not the
-    // correctness.  Here we care about correctness.
-    TreeType* node = nodeQueue.front();
-    nodeQueue.pop();
-
-    // We must make sure the upper bound and lower bound are both valid for all
-    // descendant points.  The lower bound only matters if the node was pruned.
-    // So, we must calculate the upper and lower bounds manually for the
-    // descendants.
-    double exactUpperBound = 0.0;
-    double exactLowerBound = DBL_MAX;
-    for (size_t i = 0; i < node->NumDescendants(); ++i)
-    {
-      if (trueDistances(0, node->Descendant(i)) > exactUpperBound)
-        exactUpperBound = trueDistances(0, node->Descendant(i));
-      if (trueDistances(1, node->Descendant(i)) < exactLowerBound)
-        exactLowerBound = trueDistances(1, node->Descendant(i));
-    }
-
-    // Multiplication is to add some tolerance for floating point discrepancies.
-    BOOST_REQUIRE_GE(node->Stat().UpperBound() * 1.000001, exactUpperBound);
-
-    if (node->Stat().Pruned() == centroids.n_cols)
-    {
-      BOOST_REQUIRE_LE(node->Stat().LowerBound() * 0.99999, exactLowerBound);
-    }
-    else if (node->NumChildren() == 0)
-    {
-      // The node has one point.
-      const double bestLower = std::min(node->Stat().LowerBound(),
-          lowerBounds[node->Point(0)]);
-      BOOST_REQUIRE_LE(bestLower * 0.99999, trueDistances(1, node->Point(0)));
-    }
-    else
-    {
-      // Recurse.
-      for (size_t i = 0; i < node->NumChildren(); ++i)
-        nodeQueue.push(&node->Child(i));
-    }
-  }
-}
-*/
 
 BOOST_AUTO_TEST_SUITE_END();

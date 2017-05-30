@@ -3,9 +3,14 @@
  * @author Bill March (march@gatech.edu)
  *
  * Implementation of DTB.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_EMST_DTB_IMPL_HPP
-#define __MLPACK_METHODS_EMST_DTB_IMPL_HPP
+#ifndef MLPACK_METHODS_EMST_DTB_IMPL_HPP
+#define MLPACK_METHODS_EMST_DTB_IMPL_HPP
 
 #include "dtb_rules.hpp"
 
@@ -13,74 +18,68 @@ namespace mlpack {
 namespace emst {
 
 //! Call the tree constructor that does mapping.
-template<typename TreeType>
+template<typename TreeType, typename MatType>
 TreeType* BuildTree(
-    typename TreeType::Mat& dataset,
+    MatType&& dataset,
     std::vector<size_t>& oldFromNew,
-    typename boost::enable_if_c<
-        tree::TreeTraits<TreeType>::RearrangesDataset == true, TreeType*
-    >::type = 0)
+    const typename std::enable_if<
+        tree::TreeTraits<TreeType>::RearrangesDataset>::type* = 0)
 {
-  return new TreeType(dataset, oldFromNew);
+  return new TreeType(std::forward<MatType>(dataset), oldFromNew);
 }
 
 //! Call the tree constructor that does not do mapping.
-template<typename TreeType>
+template<typename TreeType, typename MatType>
 TreeType* BuildTree(
-    const typename TreeType::Mat& dataset,
+    MatType&& dataset,
     const std::vector<size_t>& /* oldFromNew */,
-    const typename boost::enable_if_c<
-        tree::TreeTraits<TreeType>::RearrangesDataset == false, TreeType*
-    >::type = 0)
+    const typename std::enable_if<
+        !tree::TreeTraits<TreeType>::RearrangesDataset>::type* = 0)
 {
-  return new TreeType(dataset);
+  return new TreeType(std::forward<MatType>(dataset));
 }
 
 /**
  * Takes in a reference to the data set.  Copies the data, builds the tree,
  * and initializes all of the member variables.
  */
-template<typename MetricType, typename TreeType>
-DualTreeBoruvka<MetricType, TreeType>::DualTreeBoruvka(
-    const typename TreeType::Mat& dataset,
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+DualTreeBoruvka<MetricType, MatType, TreeType>::DualTreeBoruvka(
+    const MatType& dataset,
     const bool naive,
     const MetricType metric) :
-    data((tree::TreeTraits<TreeType>::RearrangesDataset && !naive) ? dataCopy : dataset),
+    tree(naive ? NULL : BuildTree<Tree>(dataset, oldFromNew)),
+    data(naive ? dataset : tree->Dataset()),
     ownTree(!naive),
     naive(naive),
     connections(dataset.n_cols),
     totalDist(0.0),
     metric(metric)
 {
-  Timer::Start("emst/tree_building");
-
-  if (!naive)
-  {
-    // Copy the dataset, if it will be modified during tree construction.
-    if (tree::TreeTraits<TreeType>::RearrangesDataset)
-      dataCopy = dataset;
-
-    tree = BuildTree<TreeType>(const_cast<typename TreeType::Mat&>(data),
-        oldFromNew);
-  }
-
-  Timer::Stop("emst/tree_building");
-
   edges.reserve(data.n_cols - 1); // Set size.
 
   neighborsInComponent.set_size(data.n_cols);
   neighborsOutComponent.set_size(data.n_cols);
   neighborsDistances.set_size(data.n_cols);
   neighborsDistances.fill(DBL_MAX);
-} // Constructor
+}
 
-template<typename MetricType, typename TreeType>
-DualTreeBoruvka<MetricType, TreeType>::DualTreeBoruvka(
-    TreeType* tree,
-    const typename TreeType::Mat& dataset,
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+DualTreeBoruvka<MetricType, MatType, TreeType>::DualTreeBoruvka(
+    Tree* tree,
     const MetricType metric) :
-    data(dataset),
     tree(tree),
+    data(tree->Dataset()),
     ownTree(false),
     naive(false),
     connections(data.n_cols),
@@ -95,8 +94,13 @@ DualTreeBoruvka<MetricType, TreeType>::DualTreeBoruvka(
   neighborsDistances.fill(DBL_MAX);
 }
 
-template<typename MetricType, typename TreeType>
-DualTreeBoruvka<MetricType, TreeType>::~DualTreeBoruvka()
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+DualTreeBoruvka<MetricType, MatType, TreeType>::~DualTreeBoruvka()
 {
   if (ownTree)
     delete tree;
@@ -106,14 +110,20 @@ DualTreeBoruvka<MetricType, TreeType>::~DualTreeBoruvka()
  * Iteratively find the nearest neighbor of each component until the MST is
  * complete.
  */
-template<typename MetricType, typename TreeType>
-void DualTreeBoruvka<MetricType, TreeType>::ComputeMST(arma::mat& results)
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+void DualTreeBoruvka<MetricType, MatType, TreeType>::ComputeMST(
+    arma::mat& results)
 {
   Timer::Start("emst/mst_computation");
 
   totalDist = 0; // Reset distance.
 
-  typedef DTBRules<MetricType, TreeType> RuleType;
+  typedef DTBRules<MetricType, Tree> RuleType;
   RuleType rules(data, connections, neighborsDistances, neighborsInComponent,
                  neighborsOutComponent, metric);
   while (edges.size() < (data.n_cols - 1))
@@ -127,7 +137,7 @@ void DualTreeBoruvka<MetricType, TreeType>::ComputeMST(arma::mat& results)
     }
     else
     {
-      typename TreeType::template DualTreeTraverser<RuleType> traverser(rules);
+      typename Tree::template DualTreeTraverser<RuleType> traverser(rules);
       traverser.Traverse(*tree, *tree);
     }
 
@@ -154,10 +164,16 @@ void DualTreeBoruvka<MetricType, TreeType>::ComputeMST(arma::mat& results)
 /**
  * Adds a single edge to the edge list
  */
-template<typename MetricType, typename TreeType>
-void DualTreeBoruvka<MetricType, TreeType>::AddEdge(const size_t e1,
-                                        const size_t e2,
-                                        const double distance)
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+void DualTreeBoruvka<MetricType, MatType, TreeType>::AddEdge(
+    const size_t e1,
+    const size_t e2,
+    const double distance)
 {
   Log::Assert((distance >= 0.0),
       "DualTreeBoruvka::AddEdge(): distance cannot be negative.");
@@ -166,13 +182,18 @@ void DualTreeBoruvka<MetricType, TreeType>::AddEdge(const size_t e1,
     edges.push_back(EdgePair(e1, e2, distance));
   else
     edges.push_back(EdgePair(e2, e1, distance));
-} // AddEdge
+}
 
 /**
  * Adds all the edges found in one iteration to the list of neighbors.
  */
-template<typename MetricType, typename TreeType>
-void DualTreeBoruvka<MetricType, TreeType>::AddAllEdges()
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+void DualTreeBoruvka<MetricType, MatType, TreeType>::AddAllEdges()
 {
   for (size_t i = 0; i < data.n_cols; i++)
   {
@@ -188,13 +209,19 @@ void DualTreeBoruvka<MetricType, TreeType>::AddAllEdges()
       connections.Union(inEdge, outEdge);
     }
   }
-} // AddAllEdges
+}
 
 /**
  * Unpermute the edge list (if necessary) and output it to results.
  */
-template<typename MetricType, typename TreeType>
-void DualTreeBoruvka<MetricType, TreeType>::EmitResults(arma::mat& results)
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+void DualTreeBoruvka<MetricType, MatType, TreeType>::EmitResults(
+    arma::mat& results)
 {
   // Sort the edges.
   std::sort(edges.begin(), edges.end(), SortFun);
@@ -203,7 +230,7 @@ void DualTreeBoruvka<MetricType, TreeType>::EmitResults(arma::mat& results)
   results.set_size(3, edges.size());
 
   // Need to unpermute the point labels.
-  if (!naive && ownTree && tree::TreeTraits<TreeType>::RearrangesDataset)
+  if (!naive && ownTree && tree::TreeTraits<Tree>::RearrangesDataset)
   {
     for (size_t i = 0; i < (data.n_cols - 1); i++)
     {
@@ -237,14 +264,19 @@ void DualTreeBoruvka<MetricType, TreeType>::EmitResults(arma::mat& results)
       results(2, i) = edges[i].Distance();
     }
   }
-} // EmitResults
+}
 
 /**
  * This function resets the values in the nodes of the tree nearest neighbor
  * distance and checks for fully connected nodes.
  */
-template<typename MetricType, typename TreeType>
-void DualTreeBoruvka<MetricType, TreeType>::CleanupHelper(TreeType* tree)
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+void DualTreeBoruvka<MetricType, MatType, TreeType>::CleanupHelper(Tree* tree)
 {
   // Reset the statistic information.
   tree->Stat().MaxNeighborDistance() = DBL_MAX;
@@ -278,8 +310,13 @@ void DualTreeBoruvka<MetricType, TreeType>::CleanupHelper(TreeType* tree)
 /**
  * The values stored in the tree must be reset on each iteration.
  */
-template<typename MetricType, typename TreeType>
-void DualTreeBoruvka<MetricType, TreeType>::Cleanup()
+template<
+    typename MetricType,
+    typename MatType,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType>
+void DualTreeBoruvka<MetricType, MatType, TreeType>::Cleanup()
 {
   for (size_t i = 0; i < data.n_cols; i++)
     neighborsDistances[i] = DBL_MAX;
@@ -288,22 +325,7 @@ void DualTreeBoruvka<MetricType, TreeType>::Cleanup()
     CleanupHelper(tree);
 }
 
-// convert the object to a string
-template<typename MetricType, typename TreeType>
-std::string DualTreeBoruvka<MetricType, TreeType>::ToString() const
-{
-  std::ostringstream convert;
-  convert << "DualTreeBoruvka [" << this << "]" << std::endl;
-  convert << "  Data: " << data.n_rows << "x" << data.n_cols <<std::endl;
-  convert << "  Total Distance: " << totalDist <<std::endl;
-  convert << "  Naive: " << naive << std::endl;
-  convert << "  Metric: " << std::endl;
-  convert << util::Indent(metric.ToString(), 2);
-  convert << std::endl;
-  return convert.str();
-}
-
-}; // namespace emst
-}; // namespace mlpack
+} // namespace emst
+} // namespace mlpack
 
 #endif

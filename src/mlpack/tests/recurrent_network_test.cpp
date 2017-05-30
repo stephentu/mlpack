@@ -3,49 +3,29 @@
  * @author Marcus Edel
  *
  * Tests the recurrent network.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #include <mlpack/core.hpp>
 
-#include <mlpack/methods/ann/activation_functions/logistic_function.hpp>
-#include <mlpack/methods/ann/activation_functions/identity_function.hpp>
-#include <mlpack/methods/ann/activation_functions/softsign_function.hpp>
-#include <mlpack/methods/ann/activation_functions/tanh_function.hpp>
-#include <mlpack/methods/ann/activation_functions/rectifier_function.hpp>
+#include <mlpack/core/optimizers/sgd/sgd.hpp>
+#include <mlpack/methods/ann/layer/layer.hpp>
 
 #include <mlpack/methods/ann/init_rules/random_init.hpp>
-#include <mlpack/methods/ann/init_rules/nguyen_widrow_init.hpp>
-
-#include <mlpack/methods/ann/layer/neuron_layer.hpp>
- #include <mlpack/methods/ann/layer/lstm_layer.hpp>
-#include <mlpack/methods/ann/layer/bias_layer.hpp>
-#include <mlpack/methods/ann/layer/binary_classification_layer.hpp>
-#include <mlpack/methods/ann/layer/multiclass_classification_layer.hpp>
-
-#include <mlpack/methods/ann/connections/full_connection.hpp>
-#include <mlpack/methods/ann/connections/self_connection.hpp>
-#include <mlpack/methods/ann/connections/fullself_connection.hpp>
-#include <mlpack/methods/ann/connections/connection_traits.hpp>
-
-#include <mlpack/methods/ann/trainer/trainer.hpp>
-
-#include <mlpack/methods/ann/ffnn.hpp>
 #include <mlpack/methods/ann/rnn.hpp>
-
-#include <mlpack/methods/ann/performance_functions/mse_function.hpp>
-#include <mlpack/methods/ann/optimizer/steepest_descent.hpp>
+#include <mlpack/core/data/binarize.hpp>
 
 #include <boost/test/unit_test.hpp>
-#include "old_boost_test_definitions.hpp"
+#include "test_tools.hpp"
 
 using namespace mlpack;
 using namespace mlpack::ann;
-
+using namespace mlpack::optimization;
 
 BOOST_AUTO_TEST_SUITE(RecurrentNetworkTest);
-
-// Be careful!  When writing new tests, always get the boolean value and store
-// it in a temporary, because the Boost unit test macros do weird things and
-// will cause bizarre problems.
 
 /**
  * Construct a 2-class dataset out of noisy sines.
@@ -87,281 +67,91 @@ void GenerateNoisySines(arma::mat& data,
  */
 BOOST_AUTO_TEST_CASE(SequenceClassificationTest)
 {
-  // Generate 12 (2 * 6) noisy sines. A single sine contains 10 points/features.
-  arma::mat input, labels;
-  GenerateNoisySines(input, labels, 10, 6);
+  // It isn't guaranteed that the recurrent network will converge in the
+  // specified number of iterations using random weights. If this works 1 of 5
+  // times, I'm fine with that. All I want to know is that the network is able
+  // to escape from local minima and to solve the task.
+  size_t successes = 0;
+  const size_t rho = 10;
 
-  /*
-   * Construct a network with 1 input unit, 4 hidden units and 2 output units.
-   * The hidden layer is connected to itself. The network structure looks like:
-   *
-   *  Input         Hidden        Output
-   * Layer(1)      Layer(4)      Layer(2)
-   * +-----+       +-----+       +-----+
-   * |     |       |     |       |     |
-   * |     +------>|     +------>|     |
-   * |     |    ..>|     |       |     |
-   * +-----+    .  +--+--+       +-----+
-   *            .     .
-   *            .     .
-   *            .......
-   */
-  NeuronLayer<LogisticFunction> inputLayer(1);
-  NeuronLayer<LogisticFunction> hiddenLayer0(4);
-  NeuronLayer<LogisticFunction> recurrentLayer0(hiddenLayer0.InputSize());
-  NeuronLayer<LogisticFunction> hiddenLayer1(2);
-  BinaryClassificationLayer<> outputLayer;
-
-  SteepestDescent< > conOptimizer0(inputLayer.InputSize(),
-      hiddenLayer0.InputSize(), 1, 0);
-  SteepestDescent< > conOptimizer2(hiddenLayer0.InputSize(),
-      hiddenLayer0.InputSize(), 1, 0);
-  SteepestDescent< > conOptimizer3(hiddenLayer0.InputSize(),
-      hiddenLayer1.OutputSize(), 1, 0);
-
-  NguyenWidrowInitialization<> randInit;
-
-  FullConnection<
-      decltype(inputLayer),
-      decltype(hiddenLayer0),
-      decltype(conOptimizer0),
-      decltype(randInit)>
-      layerCon0(inputLayer, hiddenLayer0, conOptimizer0, randInit);
-
-  SelfConnection<
-    decltype(recurrentLayer0),
-    decltype(hiddenLayer0),
-    decltype(conOptimizer2),
-    decltype(randInit)>
-    layerCon2(recurrentLayer0, hiddenLayer0, conOptimizer2, randInit);
-
-  FullConnection<
-      decltype(hiddenLayer0),
-      decltype(hiddenLayer1),
-      decltype(conOptimizer3),
-      decltype(randInit)>
-      layerCon4(hiddenLayer0, hiddenLayer1, conOptimizer3, randInit);
-
-  auto module0 = std::tie(layerCon0, layerCon2);
-  auto module1 = std::tie(layerCon4);
-  auto modules = std::tie(module0, module1);
-
-  RNN<decltype(modules),
-      decltype(outputLayer),
-      MeanSquaredErrorFunction<> > net(modules, outputLayer);
-
-  // Train the network for 1000 epochs.
-  Trainer<decltype(net)> trainer(net, 1000);
-  trainer.Train(input, labels, input, labels);
-
-  // Ask the network to classify the trained input data.
-  arma::colvec output;
-  for (size_t i = 0; i < input.n_cols; i++)
+  for (size_t trial = 0; trial < 5; ++trial)
   {
-    net.Predict(input.unsafe_col(i), output);
+    // Generate 12 (2 * 6) noisy sines. A single sine contains rho
+    // points/features.
+    arma::mat input, labelsTemp;
+    GenerateNoisySines(input, labelsTemp, rho, 6);
 
-    bool b = arma::all((output == labels.unsafe_col(i)) == 1);
-    BOOST_REQUIRE_EQUAL(b, 1);
+    arma::mat labels = arma::zeros<arma::mat>(rho, labelsTemp.n_cols);
+    for (size_t i = 0; i < labelsTemp.n_cols; ++i)
+    {
+      const int value = arma::as_scalar(arma::find(
+          arma::max(labelsTemp.col(i)) == labelsTemp.col(i), 1)) + 1;
+      labels.col(i).fill(value);
+    }
+
+    /**
+     * Construct a network with 1 input unit, 4 hidden units and 10 output
+     * units. The hidden layer is connected to itself. The network structure
+     * looks like:
+     *
+     *  Input         Hidden        Output
+     * Layer(1)      Layer(4)      Layer(10)
+     * +-----+       +-----+       +-----+
+     * |     |       |     |       |     |
+     * |     +------>|     +------>|     |
+     * |     |    ..>|     |       |     |
+     * +-----+    .  +--+--+       +-----+
+     *            .     .
+     *            .     .
+     *            .......
+     */
+    Add<> add(4);
+    Linear<> lookup(1, 4);
+    SigmoidLayer<> sigmoidLayer;
+    Linear<> linear(4, 4);
+    Recurrent<> recurrent(add, lookup, linear, sigmoidLayer, rho);
+
+    RNN<> model(rho);
+    model.Add<IdentityLayer<> >();
+    model.Add(recurrent);
+    model.Add<Linear<> >(4, 10);
+    model.Add<LogSoftMax<> >();
+
+    StandardSGD<decltype(model)> opt(model, 0.1, 500 * input.n_cols, -100);
+    model.Train(input, labels, opt);
+
+    arma::mat prediction;
+    model.Predict(input, prediction);
+
+    size_t error = 0;
+    for (size_t i = 0; i < prediction.n_cols; ++i)
+    {
+      arma::mat singlePrediction = prediction.submat((rho - 1) * rho, i,
+          rho * rho - 1, i);
+
+      const int predictionValue = arma::as_scalar(arma::find(
+          arma::max(singlePrediction.col(0)) ==
+          singlePrediction.col(0), 1) + 1);
+
+      const int targetValue = arma::as_scalar(arma::find(
+          arma::max(labelsTemp.col(i)) == labelsTemp.col(i), 1)) + 1;
+
+      if (predictionValue == targetValue)
+      {
+        error++;
+      }
+    }
+
+    double classificationError = 1 - double(error) / prediction.n_cols;
+
+    if (classificationError <= 0.2)
+    {
+      ++successes;
+      break;
+    }
   }
-}
 
-/**
- * Train and evaluate a vanilla feed forward network and a recurrent network
- * with the specified structure and compare the two networks output and overall
- * error.
- */
-template<
-    typename WeightInitRule,
-    typename PerformanceFunction,
-    typename OptimizerType,
-    typename OutputLayerType,
-    typename PerformanceFunctionType,
-    typename MatType = arma::mat
->
-void CompareVanillaNetworks(MatType& trainData,
-                            MatType& trainLabels,
-                            MatType& testData,
-                            MatType& testLabels,
-                            const size_t hiddenLayerSize,
-                            const size_t maxEpochs,
-                            WeightInitRule weightInitRule = WeightInitRule())
-{
-  BiasLayer<> biasLayer0(1);
-
-  NeuronLayer<PerformanceFunction> inputLayer(trainData.n_rows);
-  NeuronLayer<PerformanceFunction> hiddenLayer0(hiddenLayerSize);
-  NeuronLayer<PerformanceFunction> hiddenLayer1(trainLabels.n_rows);
-
-  OutputLayerType outputLayer;
-
-  OptimizerType ffnConOptimizer0(trainData.n_rows, hiddenLayerSize);
-  OptimizerType ffnConOptimizer1(1, hiddenLayerSize);
-  OptimizerType ffnConOptimizer2(hiddenLayerSize, trainLabels.n_rows);
-
-  OptimizerType rnnConOptimizer0(trainData.n_rows, hiddenLayerSize);
-  OptimizerType rnnConOptimizer1(1, hiddenLayerSize);
-  OptimizerType rnnConOptimizer2(hiddenLayerSize, trainLabels.n_rows);
-
-  FullConnection<
-    decltype(inputLayer),
-    decltype(hiddenLayer0),
-    decltype(ffnConOptimizer0),
-    decltype(weightInitRule)>
-    ffnLayerCon0(inputLayer, hiddenLayer0, ffnConOptimizer0, weightInitRule);
-
-  FullConnection<
-    decltype(inputLayer),
-    decltype(hiddenLayer0),
-    decltype(rnnConOptimizer0),
-    decltype(weightInitRule)>
-    rnnLayerCon0(inputLayer, hiddenLayer0, rnnConOptimizer0, weightInitRule);
-
-  FullConnection<
-    decltype(biasLayer0),
-    decltype(hiddenLayer0),
-    decltype(ffnConOptimizer1),
-    decltype(weightInitRule)>
-    ffnLayerCon1(biasLayer0, hiddenLayer0, ffnConOptimizer1, weightInitRule);
-
-  FullConnection<
-    decltype(biasLayer0),
-    decltype(hiddenLayer0),
-    decltype(rnnConOptimizer1),
-    decltype(weightInitRule)>
-    rnnLayerCon1(biasLayer0, hiddenLayer0, rnnConOptimizer1, weightInitRule);
-
-  FullConnection<
-      decltype(hiddenLayer0),
-      decltype(hiddenLayer1),
-      decltype(ffnConOptimizer2),
-      decltype(weightInitRule)>
-      ffnLayerCon2(hiddenLayer0, hiddenLayer1, ffnConOptimizer2, weightInitRule);
-
-  FullConnection<
-      decltype(hiddenLayer0),
-      decltype(hiddenLayer1),
-      decltype(rnnConOptimizer2),
-      decltype(weightInitRule)>
-      rnnLayerCon2(hiddenLayer0, hiddenLayer1, rnnConOptimizer2, weightInitRule);
-
-  auto ffnModule0 = std::tie(ffnLayerCon0, ffnLayerCon1);
-  auto ffnModule1 = std::tie(ffnLayerCon2);
-  auto ffnModules = std::tie(ffnModule0, ffnModule1);
-
-  auto rnnModule0 = std::tie(rnnLayerCon0, rnnLayerCon1);
-  auto rnnModule1 = std::tie(rnnLayerCon2);
-  auto rnnModules = std::tie(rnnModule0, rnnModule1);
-
-  /*
-   * Construct a feed forward network with trainData.n_rows input units,
-   * hiddenLayerSize hidden units and trainLabels.n_rows output units. The
-   * network structure looks like:
-   *
-   *  Input         Hidden        Output
-   *  Layer         Layer         Layer
-   * +-----+       +-----+       +-----+
-   * |     |       |     |       |     |
-   * |     +------>|     +------>|     |
-   * |     |       |     |       |     |
-   * +-----+       +--+--+       +-----+
-   */
-  FFNN<decltype(ffnModules), decltype(outputLayer), PerformanceFunctionType>
-      ffn(ffnModules, outputLayer);
-
-  /*
-   * Construct a recurrent network with trainData.n_rows input units,
-   * hiddenLayerSize hidden units and trainLabels.n_rows output units. The
-   * hidden layer is connected to itself. The network structure looks like:
-   *
-   *  Input         Hidden        Output
-   *  Layer         Layer         Layer
-   * +-----+       +-----+       +-----+
-   * |     |       |     |       |     |
-   * |     +------>|     +------>|     |
-   * |     |    ..>|     |       |     |
-   * +-----+    .  +--+--+       +-----+
-   *            .     .
-   *            .     .
-   *            .......
-   */
-  RNN<decltype(rnnModules), decltype(outputLayer), PerformanceFunctionType>
-      rnn(rnnModules, outputLayer);
-
-  // Train the network for maxEpochs epochs or until we reach a validation error
-  // of less then 0.001.
-  Trainer<decltype(ffn)> ffnTrainer(ffn, maxEpochs, 1, 0.001, false);
-  Trainer<decltype(rnn)> rnnTrainer(rnn, maxEpochs, 1, 0.001, false);
-
-  for (size_t i = 0; i < 5; i++)
-  {
-    rnnTrainer.Train(trainData, trainLabels, testData, testLabels);
-    ffnTrainer.Train(trainData, trainLabels, testData, testLabels);
-
-    if (!arma::is_finite(ffnTrainer.ValidationError()))
-      continue;
-
-    BOOST_REQUIRE_CLOSE(ffnTrainer.ValidationError(),
-        rnnTrainer.ValidationError(), 1e-3);
-  }
-}
-
-/**
- * Train a vanilla feed forward and recurrent network on a sequence with len
- * one. Ideally the recurrent network should produce the same output as the
- * recurrent network. The self connection shouldn't affect the output when using
- * a sequence with a length of one.
- */
-BOOST_AUTO_TEST_CASE(FeedForwardRecurrentNetworkTest)
-{
-  arma::mat input;
-  arma::mat labels;
-
-  RandomInitialization<> randInit(1, 1);
-
-  // Test on a non-linearly separable dataset (XOR).
-  input << 0 << 1 << 1 << 0 << arma::endr
-        << 1 << 0 << 1 << 0 << arma::endr;
-  labels << 0 << 0 << 1 << 1;
-
-  // Vanilla neural net with logistic activation function.
-  CompareVanillaNetworks<RandomInitialization<>,
-                      LogisticFunction,
-                      SteepestDescent<>,
-                      BinaryClassificationLayer<>,
-                      MeanSquaredErrorFunction<> >
-      (input, labels, input, labels, 10, 10, randInit);
-
-  // Vanilla neural net with identity activation function.
-  CompareVanillaNetworks<RandomInitialization<>,
-                      IdentityFunction,
-                      SteepestDescent<>,
-                      BinaryClassificationLayer<>,
-                      MeanSquaredErrorFunction<> >
-      (input, labels, input, labels, 1, 1, randInit);
-
-  // Vanilla neural net with rectifier activation function.
-  CompareVanillaNetworks<RandomInitialization<>,
-                    RectifierFunction,
-                    SteepestDescent<>,
-                    BinaryClassificationLayer<>,
-                    MeanSquaredErrorFunction<> >
-    (input, labels, input, labels, 10, 10, randInit);
-
-  // Vanilla neural net with softsign activation function.
-  CompareVanillaNetworks<RandomInitialization<>,
-                    SoftsignFunction,
-                    SteepestDescent<>,
-                    BinaryClassificationLayer<>,
-                    MeanSquaredErrorFunction<> >
-    (input, labels, input, labels, 10, 10, randInit);
-
-  // Vanilla neural net with tanh activation function.
-  CompareVanillaNetworks<RandomInitialization<>,
-                    TanhFunction,
-                    SteepestDescent<>,
-                    BinaryClassificationLayer<>,
-                    MeanSquaredErrorFunction<> >
-    (input, labels, input, labels, 10, 10, randInit);
+  BOOST_REQUIRE_GE(successes, 1);
 }
 
 /**
@@ -501,9 +291,7 @@ void GenerateNextEmbeddedReber(const arma::Mat<char>& transitions,
 /**
  * Train the specified network and the construct a Reber grammar dataset.
  */
-template<typename HiddenLayerType>
-void ReberGrammarTestNetwork(HiddenLayerType& hiddenLayer0,
-                             bool embedded = false)
+void ReberGrammarTestNetwork(bool embedded = false)
 {
   // Reber state transition matrix. (The last two columns are the indices to the
   // next path).
@@ -515,8 +303,8 @@ void ReberGrammarTestNetwork(HiddenLayerType& hiddenLayer0,
               << 'P' << 'V' << '3' << '5' << arma::endr
               << 'E' << 'E' << '0' << '0' << arma::endr;
 
-  const size_t trainReberGrammarCount = 1000;
-  const size_t testReberGrammarCount = 1000;
+  const size_t trainReberGrammarCount = 800;
+  const size_t testReberGrammarCount = 400;
 
   std::string trainReber, testReber;
   arma::field<arma::mat> trainInput(1, trainReberGrammarCount);
@@ -568,124 +356,98 @@ void ReberGrammarTestNetwork(HiddenLayerType& hiddenLayer0,
    * |     |       |     |       |     |
    * |     +------>|     +------>|     |
    * |     |    ..>|     |       |     |
-   * +-----+    .  +--+--+       +-----+
+   * +-----+    .  +--+--+       +-- ---+
    *            .     .
    *            .     .
    *            .......
    */
-  NeuronLayer<LogisticFunction> inputLayer(7);
-  NeuronLayer<IdentityFunction> recurrentLayer0(hiddenLayer0.OutputSize());
-  NeuronLayer<LogisticFunction> hiddenLayer1(7);
-  BinaryClassificationLayer<> outputLayer;
-
-  SteepestDescent< > conOptimizer0(inputLayer.OutputSize(),
-      hiddenLayer0.InputSize(), 0.1);
-  SteepestDescent< > conOptimizer2(recurrentLayer0.OutputSize(),
-      hiddenLayer0.InputSize(), 0.1);
-  SteepestDescent< > conOptimizer3(hiddenLayer0.OutputSize(),
-      hiddenLayer1.InputSize(), 0.1);
-
-  NguyenWidrowInitialization<> randInit;
-
-  FullConnection<
-      decltype(inputLayer),
-      decltype(hiddenLayer0),
-      decltype(conOptimizer0),
-      decltype(randInit)>
-      layerCon0(inputLayer, hiddenLayer0, conOptimizer0, randInit);
-
-  FullselfConnection<
-    decltype(recurrentLayer0),
-    decltype(hiddenLayer0),
-    decltype(conOptimizer2),
-    decltype(randInit)>
-    layerTypeLSTM(recurrentLayer0, hiddenLayer0, conOptimizer2, randInit);
-
-  SelfConnection<
-    decltype(recurrentLayer0),
-    decltype(hiddenLayer0),
-    decltype(conOptimizer2),
-    decltype(randInit)>
-    layerTypeBasis(recurrentLayer0, hiddenLayer0, conOptimizer2, randInit);
-
-  typename std::conditional<LayerTraits<HiddenLayerType>::IsLSTMLayer,
-      typename std::remove_reference<decltype(layerTypeLSTM)>::type,
-      typename std::remove_reference<decltype(layerTypeBasis)>::type>::type
-      layerCon2(recurrentLayer0, hiddenLayer0, conOptimizer2, randInit);
-
-  FullConnection<
-      decltype(hiddenLayer0),
-      decltype(hiddenLayer1),
-      decltype(conOptimizer3),
-      decltype(randInit)>
-      layerCon4(hiddenLayer0, hiddenLayer1, conOptimizer3, randInit);
-
-  auto module0 = std::tie(layerCon0, layerCon2);
-  auto module1 = std::tie(layerCon4);
-  auto modules = std::tie(module0, module1);
-
-  RNN<decltype(modules),
-      decltype(outputLayer),
-      MeanSquaredErrorFunction<> > net(modules, outputLayer);
-
-  // Train the network for (500 * trainReberGrammarCount) epochs.
-  Trainer<decltype(net)> trainer(net, 1, 1, 0, false);
-
-  arma::mat inputTemp, labelsTemp;
-  for (size_t i = 0; i < 500; i++)
+  // It isn't guaranteed that the recurrent network will converge in the
+  // specified number of iterations using random weights. If this works 1 of 5
+  // times, I'm fine with that. All I want to know is that the network is able
+  // to escape from local minima and to solve the task.
+  size_t successes = 0;
+  size_t offset = 0;
+  for (size_t trial = 0; trial < 5; ++trial)
   {
-    for (size_t j = 0; j < trainReberGrammarCount; j++)
+    const size_t outputSize = 7;
+    const size_t inputSize = 7;
+    const size_t rho = trainInput.at(0, 0).n_elem / inputSize;
+
+    RNN<MeanSquaredError<> > model(rho);
+
+    model.Add<IdentityLayer<> >();
+    model.Add<Linear<> >(inputSize, 14);
+    model.Add<LSTM<> >(14, 7, rho);
+    model.Add<Linear<> >(7, outputSize);
+    model.Add<SigmoidLayer<> >();
+
+    StandardSGD<decltype(model)> opt(model, 0.1, 2, -50000);
+
+    arma::mat inputTemp, labelsTemp;
+    for (size_t i = 0; i < (10 + offset); i++)
     {
-      inputTemp = trainInput.at(0, j);
-      labelsTemp = trainLabels.at(0, j);
-      trainer.Train(inputTemp, labelsTemp, inputTemp, labelsTemp);
-    }
-  }
+      for (size_t j = 0; j < trainReberGrammarCount; j++)
+      {
+        inputTemp = trainInput.at(0, j);
+        labelsTemp = trainLabels.at(0, j);
 
-  double error = 0;
-
-  // Ask the network to predict the next Reber grammar in the given sequence.
-  for (size_t i = 0; i < testReberGrammarCount; i++)
-  {
-    arma::colvec output;
-    arma::colvec input = testInput.at(0, i);
-
-    net.Predict(input, output);
-
-    const size_t reberGrammerSize = 7;
-    std::string inputReber = "";
-
-    size_t reberError = 0;
-    for (size_t j = 0; j < (output.n_elem / reberGrammerSize); j++)
-    {
-      if (arma::sum(output.subvec(j * reberGrammerSize, (j + 1) *
-          reberGrammerSize - 1)) != 1) break;
-
-      char predictedSymbol, inputSymbol;
-      std::string reberChoices;
-
-      ReberReverseTranslation(output.subvec(j * reberGrammerSize, (j + 1) *
-          reberGrammerSize - 1), predictedSymbol);
-      ReberReverseTranslation(input.subvec(j * reberGrammerSize, (j + 1) *
-          reberGrammerSize - 1), inputSymbol);
-      inputReber += inputSymbol;
-
-      if (embedded)
-        GenerateNextEmbeddedReber(transitions, inputReber, reberChoices);
-      else
-        GenerateNextReber(transitions, inputReber, reberChoices);
-
-      if (reberChoices.find(predictedSymbol) != std::string::npos)
-        reberError++;
+        model.Train(inputTemp, labelsTemp, opt);
+      }
     }
 
-    if (reberError != (output.n_elem / reberGrammerSize))
-      error += 1;
+    double error = 0;
+
+    // Ask the network to predict the next Reber grammar in the given sequence.
+    for (size_t i = 0; i < testReberGrammarCount; i++)
+    {
+      arma::mat output, prediction;
+      arma::mat input = testInput.at(0, i);
+
+      model.Predict(input, prediction);
+      data::Binarize(prediction, output, 0.5);
+
+      const size_t reberGrammerSize = 7;
+      std::string inputReber = "";
+
+      size_t reberError = 0;
+      for (size_t j = 0; j < (output.n_elem / reberGrammerSize); j++)
+      {
+        if (arma::sum(arma::sum(output.submat(j * reberGrammerSize, 0, (j + 1) *
+            reberGrammerSize - 1, 0))) != 1) break;
+
+        char predictedSymbol, inputSymbol;
+        std::string reberChoices;
+
+        ReberReverseTranslation(output.submat(j * reberGrammerSize, 0, (j + 1) *
+            reberGrammerSize - 1, 0), predictedSymbol);
+        ReberReverseTranslation(input.submat(j * reberGrammerSize, 0, (j + 1) *
+            reberGrammerSize - 1, 0), inputSymbol);
+        inputReber += inputSymbol;
+
+        if (embedded)
+          GenerateNextEmbeddedReber(transitions, inputReber, reberChoices);
+        else
+          GenerateNextReber(transitions, inputReber, reberChoices);
+
+        if (reberChoices.find(predictedSymbol) != std::string::npos)
+          reberError++;
+      }
+
+      if (reberError != (output.n_elem / reberGrammerSize))
+        error += 1;
+    }
+
+    error /= testReberGrammarCount;
+    if (error <= 0.2)
+    {
+      ++successes;
+      break;
+    }
+
+    offset += 3;
   }
 
-  error /= testReberGrammarCount;
-
-  BOOST_REQUIRE_LE(error, 0.2);
+  BOOST_REQUIRE_GE(successes, 1);
 }
 
 /**
@@ -693,11 +455,7 @@ void ReberGrammarTestNetwork(HiddenLayerType& hiddenLayer0,
  */
 BOOST_AUTO_TEST_CASE(ReberGrammarTest)
 {
-  LSTMLayer<> hiddenLayerLSTM(10);
-  ReberGrammarTestNetwork(hiddenLayerLSTM);
-
-  NeuronLayer<LogisticFunction> hiddenLayerLogistic(5);
-  ReberGrammarTestNetwork(hiddenLayerLogistic);
+  ReberGrammarTestNetwork(false);
 }
 
 /**
@@ -705,11 +463,7 @@ BOOST_AUTO_TEST_CASE(ReberGrammarTest)
  */
 BOOST_AUTO_TEST_CASE(EmbeddedReberGrammarTest)
 {
-  LSTMLayer<> hiddenLayerLSTM(10);
-  ReberGrammarTestNetwork(hiddenLayerLSTM, true);
-
-  LSTMLayer<> hiddenLayerLSTMPeephole(10, 1, true);
-  ReberGrammarTestNetwork(hiddenLayerLSTMPeephole, true);
+  ReberGrammarTestNetwork(true);
 }
 
 /*
@@ -739,66 +493,73 @@ BOOST_AUTO_TEST_CASE(EmbeddedReberGrammarTest)
  *
  * @param input The generated input sequence.
  * @param input The generated output sequence.
+ * @param sequences Number of samples.
  */
-void GenerateDistractedSequence(arma::mat& input, arma::mat& output)
+void GenerateDistractedSequence(arma::mat& input,
+                                arma::mat& output,
+                                const size_t sequences)
 {
-  input = arma::zeros<arma::mat>(10, 10);
-  output = arma::zeros<arma::mat>(3, 10);
+  input = arma::zeros<arma::mat>(100, sequences);
+  output = arma::zeros<arma::mat>(30, sequences);
 
-  arma::Col<size_t> index = arma::shuffle(arma::linspace<arma::Col<size_t> >(
-      0, 7, 8));
-
-  // Set the target in the input sequence and the corresponding targets in the
-  // output sequence by following the correct order.
-  for (size_t i = 0; i < 2; i++)
+  for (size_t i = 0; i < sequences; ++i)
   {
-    size_t idx = rand() % 2;
-    input(idx, index(i)) = 1;
-    output(idx, index(i) > index(i == 0) ? 9 : 8) = 1;
+    arma::mat inputTemp = arma::zeros<arma::mat>(10, 10);
+    arma::mat outputTemp = arma::zeros<arma::mat>(3, 10);
+
+    arma::Col<size_t> index = arma::shuffle(
+        arma::linspace<arma::Col<size_t> >(0, 7, 8));
+
+    // Set the target in the input sequence and the corresponding targets in the
+    // output sequence by following the correct order.
+    for (size_t i = 0; i < 2; i++)
+    {
+      size_t idx = rand() % 2;
+      inputTemp(idx, index(i)) = 1;
+      outputTemp(idx, index(i) > index(i == 0) ? 9 : 8) = 1;
+    }
+
+    for (size_t i = 2; i < 8; i++)
+      inputTemp(2 + rand() % 6, index(i)) = 1;
+
+    // Set the prompts which direct the network to give an answer.
+    inputTemp(8, 8) = 1;
+    inputTemp(9, 9) = 1;
+
+    inputTemp.reshape(inputTemp.n_elem, 1);
+    outputTemp.reshape(outputTemp.n_elem, 1);
+
+    input.col(i) = inputTemp;
+    output.col(i) = outputTemp;
   }
-
-  for (size_t i = 2; i < 8; i++)
-    input(2 + rand() % 6, index(i)) = 1;
-
-
-  // Set the prompts which direct the network to give an answer.
-  input(8, 8) = 1;
-  input(9, 9) = 1;
-
-  input.reshape(input.n_elem, 1);
-  output.reshape(output.n_elem, 1);
 }
 
 /**
  * Train the specified network and the construct distracted sequence recall
  * dataset.
  */
-template<typename HiddenLayerType>
-void DistractedSequenceRecallTestNetwork(HiddenLayerType& hiddenLayer0)
+void DistractedSequenceRecallTestNetwork()
 {
-  const size_t trainDistractedSequenceCount = 1000;
-  const size_t testDistractedSequenceCount = 1000;
+  const size_t trainDistractedSequenceCount = 800;
+  const size_t testDistractedSequenceCount = 400;
 
-  arma::field<arma::mat> trainInput(1, trainDistractedSequenceCount);
-  arma::field<arma::mat> trainLabels(1, trainDistractedSequenceCount);
-  arma::field<arma::mat> testInput(1, testDistractedSequenceCount);
-  arma::field<arma::mat> testLabels(1, testDistractedSequenceCount);
+  arma::mat trainInput, trainLabels, testInput, testLabels;
 
   // Generate the training data.
-  for (size_t i = 0; i < trainDistractedSequenceCount; i++)
-    GenerateDistractedSequence(trainInput(0, i), trainLabels(0, i));
+  GenerateDistractedSequence(trainInput, trainLabels,
+      trainDistractedSequenceCount);
 
   // Generate the test data.
-  for (size_t i = 0; i < testDistractedSequenceCount; i++)
-    GenerateDistractedSequence(testInput(0, i), testLabels(0, i));
+  GenerateDistractedSequence(testInput, testLabels,
+      testDistractedSequenceCount);
 
   /*
-   * Construct a network with 7 input units, layerSize hidden units and 7 output
-   * units. The hidden layer is connected to itself. The network structure looks
-   * like:
+   * Construct a network with 10 input units, layerSize hidden units and 3
+   * output units. The hidden layer is connected to itself. The network
+   * structure looks like:
    *
    *  Input         Hidden        Output
-   * Layer(7)  Layer(layerSize)   Layer(7)
+   * Layer(10)  Layer(layerSize)   Layer(3)
    * +-----+       +-----+       +-----+
    * |     |       |     |       |     |
    * |     +------>|     +------>|     |
@@ -808,98 +569,66 @@ void DistractedSequenceRecallTestNetwork(HiddenLayerType& hiddenLayer0)
    *            .     .
    *            .......
    */
-  NeuronLayer<LogisticFunction> inputLayer(10);
-  NeuronLayer<IdentityFunction> recurrentLayer0(hiddenLayer0.OutputSize());
-  NeuronLayer<LogisticFunction> hiddenLayer1(3);
-  BinaryClassificationLayer<> outputLayer;
+  const size_t outputSize = 3;
+  const size_t inputSize = 10;
+  const size_t rho = trainInput.col(0).n_elem / inputSize;
 
-  SteepestDescent< > conOptimizer0(inputLayer.OutputSize(),
-      hiddenLayer0.InputSize(), 0.1);
-  SteepestDescent< > conOptimizer2(recurrentLayer0.OutputSize(),
-      hiddenLayer0.InputSize(), 0.1);
-  SteepestDescent< > conOptimizer3(hiddenLayer0.OutputSize(),
-      hiddenLayer1.InputSize(), 0.1);
-
-  NguyenWidrowInitialization<> randInit;
-
-  FullConnection<
-      decltype(inputLayer),
-      decltype(hiddenLayer0),
-      decltype(conOptimizer0),
-      decltype(randInit)>
-      layerCon0(inputLayer, hiddenLayer0, conOptimizer0, randInit);
-
-  FullselfConnection<
-    decltype(recurrentLayer0),
-    decltype(hiddenLayer0),
-    decltype(conOptimizer2),
-    decltype(randInit)>
-    layerTypeLSTM(recurrentLayer0, hiddenLayer0, conOptimizer2, randInit);
-
-  SelfConnection<
-    decltype(recurrentLayer0),
-    decltype(hiddenLayer0),
-    decltype(conOptimizer2),
-    decltype(randInit)>
-    layerTypeBasis(recurrentLayer0, hiddenLayer0, conOptimizer2, randInit);
-
-  typename std::conditional<LayerTraits<HiddenLayerType>::IsLSTMLayer,
-      typename std::remove_reference<decltype(layerTypeLSTM)>::type,
-      typename std::remove_reference<decltype(layerTypeBasis)>::type>::type
-      layerCon2(recurrentLayer0, hiddenLayer0, conOptimizer2, randInit);
-
-  FullConnection<
-      decltype(hiddenLayer0),
-      decltype(hiddenLayer1),
-      decltype(conOptimizer3),
-      decltype(randInit)>
-      layerCon4(hiddenLayer0, hiddenLayer1, conOptimizer3, randInit);
-
-  auto module0 = std::tie(layerCon0, layerCon2);
-  auto module1 = std::tie(layerCon4);
-  auto modules = std::tie(module0, module1);
-
-  RNN<decltype(modules),
-      decltype(outputLayer),
-      MeanSquaredErrorFunction<> > net(modules, outputLayer);
-
-  // Train the network for (500 * trainDistractedSequenceCount) epochs.
-  Trainer<decltype(net)> trainer(net, 1, 1, 0, false);
-
-  arma::mat inputTemp, labelsTemp;
-  for (size_t i = 0; i < 500; i++)
+  // It isn't guaranteed that the recurrent network will converge in the
+  // specified number of iterations using random weights. If this works 1 of 5
+  // times, I'm fine with that. All I want to know is that the network is able
+  // to escape from local minima and to solve the task.
+  size_t successes = 0;
+  size_t offset = 0;
+  for (size_t trial = 0; trial < 5; ++trial)
   {
-    for (size_t j = 0; j < trainDistractedSequenceCount; j++)
+    RandomInitialization init(-0.5, 0.5);
+    MeanSquaredError<> output;
+    RNN<MeanSquaredError<>, RandomInitialization> model(
+        rho, false, output, init);
+    model.Add<IdentityLayer<> >();
+    model.Add<Linear<> >(inputSize, 16);
+    model.Add<LSTM<> >(16, 7, rho);
+    model.Add<Linear<> >(7, outputSize);
+    model.Add<SigmoidLayer<> >();
+
+    StandardSGD<decltype(model)> opt(model, 0.1,
+        trainDistractedSequenceCount * (6 + offset), -1);
+
+    arma::mat inputTemp, labelsTemp;
+    model.Train(trainInput, trainLabels, opt);
+
+    double error = 0;
+
+    // Ask the network to predict the targets in the given sequence at the
+    // prompts.
+    for (size_t i = 0; i < testDistractedSequenceCount; i++)
     {
-      inputTemp = trainInput.at(0, j);
-      labelsTemp = trainLabels.at(0, j);
+      arma::mat output;
+      arma::mat input = testInput.col(i);
 
-      trainer.Train(inputTemp, labelsTemp, inputTemp, labelsTemp);
+      model.Predict(input, output);
+      data::Binarize(output, output, 0.5);
+
+      if (arma::accu(arma::abs(testLabels.col(i) - output)) != 0)
+        error += 1;
     }
+
+    error /= testDistractedSequenceCount;
+
+    // Can we reproduce the results from the paper. They provide an 95% accuracy
+    // on a test set of 1000 randomly selected sequences.
+    // Ensure that this is within tolerance, which is at least as good as the
+    // paper's results (plus a little bit for noise).
+    if (error <= 0.3)
+    {
+      ++successes;
+      break;
+    }
+
+    offset += 2;
   }
 
-  double error = 0;
-
-  // Ask the network to predict the targets in the given sequence at the
-  // prompts.
-  for (size_t i = 0; i < testDistractedSequenceCount; i++)
-  {
-    arma::colvec output;
-    arma::colvec input = testInput.at(0, i);
-
-    net.Predict(input, output);
-
-    if (arma::sum(arma::abs(testLabels.at(0, i) - output)) != 0)
-      error += 1;
-  }
-
-  error /= testDistractedSequenceCount;
-
-  // Can we reproduce the results from the paper. They provide an 95% accuracy
-  // on a test set of 1000 randomly selected sequences.
-  // Ensure that this is within tolerance, which is at least as good as the
-  // paper's results (plus a little bit for noise).
-  BOOST_REQUIRE_LE(error, 0.1);
+  BOOST_REQUIRE_GE(successes, 1);
 }
 
 /**
@@ -908,11 +637,7 @@ void DistractedSequenceRecallTestNetwork(HiddenLayerType& hiddenLayer0)
  */
 BOOST_AUTO_TEST_CASE(DistractedSequenceRecallTest)
 {
-  LSTMLayer<> hiddenLayerLSTM(10, 10);
-  DistractedSequenceRecallTestNetwork(hiddenLayerLSTM);
-
-  LSTMLayer<> hiddenLayerLSTMPeephole(10, 1, true);
-  DistractedSequenceRecallTestNetwork(hiddenLayerLSTM);
+  DistractedSequenceRecallTestNetwork();
 }
 
 BOOST_AUTO_TEST_SUITE_END();

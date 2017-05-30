@@ -1,9 +1,11 @@
-/*! @page sample Simple Sample MLPACK Programs
+/*! @page sample Simple Sample mlpack Programs
 
 @section sampleintro Introduction
 
-On this page, several simple MLPACK examples are contained, in increasing order
-of complexity.
+On this page, several simple mlpack examples are contained, in increasing order
+of complexity.  If you compile from the command-line, be sure that your compiler
+is in C++11 mode.  With gcc and clang, this can be accomplished by adding the
+@c -std=c++11 option.
 
 @section covariance Covariance Computation
 
@@ -11,7 +13,7 @@ A simple program to compute the covariance of a data matrix ("data.csv"),
 assuming that the data is already centered, and save it to file.
 
 @code
-// Includes all relevant components of MLPACK.
+// Includes all relevant components of mlpack.
 #include <mlpack/core.hpp>
 
 // Convenience.
@@ -60,8 +62,8 @@ int main()
   NeighborSearch<NearestNeighborSort, ManhattanDistance> nn(data);
 
   // Create the object we will store the nearest neighbors in.
-  arma::Col<size_t> neighbors;
-  arma::vec distances; // We need to store the distance too.
+  arma::Mat<size_t> neighbors;
+  arma::mat distances; // We need to store the distance too.
 
   // Compute the neighbors.
   nn.Search(1, neighbors, distances);
@@ -69,7 +71,7 @@ int main()
   // Write each neighbor and distance using Log.
   for (size_t i = 0; i < neighbors.n_elem; ++i)
   {
-    Log::Info << "Nearest neighbor of point " << i << " is point "
+    std::cout << "Nearest neighbor of point " << i << " is point "
         << neighbors[i] << " and the distance is " << distances[i] << ".\n";
   }
 }
@@ -79,8 +81,8 @@ int main()
 
 For more complex examples, it is useful to refer to the main executables:
 
- - methods/neighbor_search/allknn_main.cpp
- - methods/neighbor_search/allkfn_main.cpp
+ - methods/neighbor_search/knn_main.cpp
+ - methods/neighbor_search/kfn_main.cpp
  - methods/emst/emst_main.cpp
  - methods/radical/radical_main.cpp
  - methods/nca/nca_main.cpp

@@ -72,6 +72,7 @@ A list of all the sections this tutorial contains.
    - \ref cli_ex3_kmtut
    - \ref cli_ex4_kmtut
    - \ref cli_ex6_kmtut
+   - \ref cli_ex7_kmtut
  - \ref kmeans_kmtut
    - \ref kmeans_ex1_kmtut
    - \ref kmeans_ex2_kmtut
@@ -83,16 +84,17 @@ A list of all the sections this tutorial contains.
    - \ref kmeans_metric_kmtut
    - \ref kmeans_initial_partition_kmtut
    - \ref kmeans_empty_cluster_kmtut
+   - \ref kmeans_lloyd_kmtut
  - \ref further_doc_kmtut
 
 @section cli_kmtut Command-Line 'kmeans'
 
-\b mlpack provides a command-line executable, \c kmeans, to allow easy execution
-of the k-means algorithm on data.  Complete documentation of the executable can
-be found by typing
+\b mlpack provides a command-line executable, \c mlpack_kmeans, to allow easy
+execution of the k-means algorithm on data.  Complete documentation of the
+executable can be found by typing
 
 @code
-$ kmeans --help
+$ mlpack_kmeans --help
 @endcode
 
 As of October 2014, support for overclustering has been removed due to bugs and
@@ -100,7 +102,8 @@ lack of usage.  If this is support you were using, or are interested, please
 file a bug or get in touch with the \b mlpack developers in some way so that the
 support can be re-implemented.
 
-Below are several examples demonstrating simple use of the \c kmeans executable.
+Below are several examples demonstrating simple use of the \c mlpack_kmeans
+executable.
 
 @subsection cli_ex1_kmtut Simple k-means clustering
 
@@ -111,7 +114,7 @@ cluster assignments of each point will be stored in assignments.csv.  Each row
 in assignments.csv will correspond to the row in dataset.csv.
 
 @code
-$ kmeans -c 5 -i dataset.csv -v -o assignments.csv
+$ mlpack_kmeans -c 5 -i dataset.csv -v -o assignments.csv
 @endcode
 
 @subsection cli_ex2_kmtut Saving the resulting centroids
@@ -122,7 +125,7 @@ option allows specification of a file into which the centroids will be saved
 (one centroid per line, if it is a CSV or other text format).
 
 @code
-$ kmeans -c 5 -i dataset.csv -v -o assignments.csv -C centroids.csv
+$ mlpack_kmeans -c 5 -i dataset.csv -v -o assignments.csv -C centroids.csv
 @endcode
 
 @subsection cli_ex3_kmtut Allowing empty clusters
@@ -134,7 +137,7 @@ is expected behavior -- if a cluster has no points, the concept of a centroid
 makes no sense.
 
 @code
-$ kmeans -c 5 -i dataset.csv -v -o assignments.csv -C centroids.csv
+$ mlpack_kmeans -c 5 -i dataset.csv -v -o assignments.csv -C centroids.csv
 @endcode
 
 @subsection cli_ex4_kmtut Limiting the maximum number of iterations
@@ -147,7 +150,7 @@ number of iterations is 0, the algorithm will run until convergence -- or
 potentially forever.  The example below sets a maximum of 250 iterations.
 
 @code
-$ kmeans -c 5 -i dataset.csv -v -o assignments.csv -m 250
+$ mlpack_kmeans -c 5 -i dataset.csv -v -o assignments.csv -m 250
 @endcode
 
 @subsection cli_ex6_kmtut Using Bradley-Fayyad "refined start"
@@ -174,7 +177,45 @@ refined start technique, sampling 10% of the dataset 25 times to produce the
 initial centroids.
 
 @code
-$ kmeans -c 5 -i dataset.csv -v -o assignments.csv -r -S 25 -p 0.2
+$ mlpack_kmeans -c 5 -i dataset.csv -v -o assignments.csv -r -S 25 -p 0.2
+@endcode
+
+@subsection cli_ex7_kmtut Using different k-means algorithms
+
+The \c mlpack_kmeans program implements six different strategies for
+clustering; each of these gives the exact same results, but will have different
+runtimes.  The particular algorithm to use can be specified with the \c -a or
+\c --algorithm option.  The choices are:
+
+ - \c naive: the standard Lloyd iteration; takes \f$O(kN)\f$ time per iteration.
+ - \c pelleg-moore: the 'blacklist' algorithm, which builds a kd-tree on the
+   data.  This can be fast when k is small and the dimensionality is reasonably
+   low.
+ - \c elkan: Elkan's algorithm for k-means, which maintains upper and lower
+   distance bounds between each point and each centroid.  This can be very fast,
+   but it does not scale well to the case of large N or k, and uses a lot of
+   memory.
+ - \c hamerly: Hamerly's algorithm is a variant of Elkan's algorithm that
+   handles memory usage much better and thus can operate with much larger
+   datasets than Elkan's algorithm.
+ - \c dualtree: The dual-tree algorithm for k-means builds a kd-tree on both the
+   centroids and the points in order to prune away as much work as possible.
+   This algorithm is most effective when both N and k are large.
+ - \c dualtree-covertree: This is the dual-tree algorithm using cover trees
+   instead of kd-trees.  It satisfies the runtime guarantees specified in the
+   dual-tree k-means paper.
+
+In general, the \c naive algorithm will be much slower than the others on
+datasets that are larger than tiny.
+
+The example below uses the \c dualtree algorithm to perform k-means clustering
+with 5 clusters on the dataset in \c dataset.csv, using the initial centroids in
+\c initial_centroids.csv, saving the resulting cluster assignments to
+\c assignments.csv:
+
+@code
+$ mlpack_kmeans -i dataset.csv -c 5 -v -I initial_centroids.csv -a dualtree \
+> -o assignments.csv
 @endcode
 
 @section kmeans_kmtut The 'KMeans' class
@@ -204,7 +245,7 @@ extern arma::mat data;
 extern size_t clusters;
 
 // The assignments will be stored in this vector.
-arma::Col<size_t> assignments;
+arma::Row<size_t> assignments;
 
 // Initialize with the default arguments.
 KMeans<> k;
@@ -230,7 +271,7 @@ extern arma::mat data;
 extern size_t clusters;
 
 // The assignments will be stored in this vector.
-arma::Col<size_t> assignments;
+arma::Row<size_t> assignments;
 // The centroids will be stored in this matrix.
 arma::mat centroids;
 
@@ -279,7 +320,7 @@ extern arma::mat dataset;
 extern size_t clusters;
 
 // A vector pre-filled with initial assignment guesses.
-extern arma::Col<size_t> assignments;
+extern arma::Row<size_t> assignments;
 
 KMeans<> k;
 
@@ -299,7 +340,7 @@ extern arma::mat dataset;
 extern size_t clusters;
 
 // A vector pre-filled with initial assignment guesses.
-extern arma::Col<size_t> assignments;
+extern arma::Row<size_t> assignments;
 
 // This will hold the centroids of the finished clusters.
 arma::mat centroids;
@@ -353,7 +394,7 @@ extern size_t clusters;
 extern arma::mat centroids;
 
 // This will be filled with the final cluster assignments for each point.
-arma::Col<size_t> assignments;
+arma::Row<size_t> assignments;
 
 KMeans<> k;
 
@@ -380,8 +421,10 @@ will not be used to initialize the algorithm.  See \ref kmeans_initial_partition
 @subsection kmeans_ex7_kmtut Running sparse k-means
 
 The \c Cluster() function can work on both sparse and dense matrices, so all of
-the above examples can be used with sparse matrices instead.  Below is a simple
-example.  Note that the centroids are returned as a sparse matrix also.
+the above examples can be used with sparse matrices instead, if the fifth
+template parameter is modified.  Below is a simple example.  Note that the
+centroids are returned as a dense matrix, because the centroids of collections
+of sparse points are not generally sparse.
 
 @code
 // The sparse dataset.
@@ -390,12 +433,13 @@ extern arma::sp_mat sparseDataset;
 extern size_t clusters;
 
 // The assignments will be stored in this vector.
-arma::Col<size_t> assignments;
+arma::Row<size_t> assignments;
 // The centroids of each cluster will be stored in this sparse matrix.
 arma::sp_mat sparseCentroids;
 
-// No template parameter modification is necessary.
-KMeans<> k;
+// We must change the fifth (and last) template parameter.
+KMeans<metric::EuclideanDistance, SampleInitialization, MaxVarianceNewCluster,
+       NaiveKMeans, arma::sp_mat> k;
 k.Cluster(sparseDataset, clusters, assignments, sparseCentroids);
 @endcode
 
@@ -408,18 +452,25 @@ template parameters:
  - \c MetricType: controls the distance metric used for clustering (by
    default, the squared Euclidean distance is used)
  - \c InitialPartitionPolicy: the method by which initial clusters are set; by
-   default, \ref mlpack::kmeans::RandomPartition "RandomPartition" is used
+   default, \ref mlpack::kmeans::SampleInitialization "SampleInitialization" is
+   used
  - \c EmptyClusterPolicy: the action taken when an empty cluster is encountered;
    by default, \ref mlpack::kmeans::MaxVarianceNewCluster "MaxVarianceNewCluster"
    is used
+ - \c LloydStepType: this defines the strategy used to make a single Lloyd
+   iteration; by default this is the typical Lloyd iteration specified in
+   \ref mlpack::kmeans::NaiveKMeans "NaiveKMeans"
+ - \c MatType: type of data matrix to use for clustering
 
 The class is defined like below:
 
 @code
 template<
   typename DistanceMetric = mlpack::metric::SquaredEuclideanDistance,
-  typename InitialPartitionPolicy = RandomPartition,
-  typename EmptyClusterPolicy = MaxVarianceNewCluster
+  typename InitialPartitionPolicy = SampleInitialization,
+  typename EmptyClusterPolicy = MaxVarianceNewCluster,
+  template<class, class> class LloydStepType = NaiveKMeans,
+  typename MatType = arma::mat
 >
 class KMeans;
 @endcode
@@ -476,19 +527,30 @@ literature.  Fortunately, the \c KMeans<> class makes it very easy to implement
 one of these methods and plug it in without needing to modify the existing
 algorithm code at all.
 
-By default, the \c KMeans<> class uses mlpack::kmeans::RandomPartition, which
-randomly partitions points into clusters.  However, writing a new policy is
-simple; it needs to only implement the following functions:
+By default, the \c KMeans<> class uses mlpack::kmeans::SampleInitialization,
+which randomly samples points as initial centroids.  However, writing a new
+policy is simple; it needs to only implement the following functions:
 
 @code
 // Empty constructor is required.
 InitialPartitionPolicy();
 
-// This function is called to initialize the clusters.
+// Only *one* of the following two functions is required!  You should implement
+// whichever you find more convenient to implement.
+
+// This function is called to initialize the clusters and returns centroids.
 template<typename MatType>
 void Cluster(MatType& data,
              const size_t clusters,
-             arma::Col<size_t> assignments);
+             arma::mat& centroids);
+
+// This function is called to initialize the clusters and returns individual
+// point assignments.  The centroids will then be calculated from the given
+// assignments.
+template<typename MatType>
+void Cluster(MatType& data,
+             const size_t clusters,
+             arma::Row<size_t> assignments);
 @endcode
 
 The templatization of the \c Cluster() function allows both dense and sparse
@@ -501,17 +563,27 @@ and the wrong type of matrix, you will get many ugly compilation errors!
 // The Cluster() function specialized for dense matrices.
 void Cluster(arma::mat& data,
              const size_t clusters,
-             arma::Col<size_t> assignments);
+             arma::Row<size_t> assignments);
 @endcode
 
-One alternate to the default RandomPartition policy is the RefinedStart policy,
-which is an implementation of the Bradley and Fayyad approach for finding
-initial points detailed in "Refined initial points for k-means clustering" and
-other places in this document.  Also see the documentation for
-mlpack::kmeans::RefinedStart for more information.
+Note that only one of the two possible \c Cluster() functions are required.
+This is because sometimes it is easier to express an initial partitioning policy
+as something that returns point assignments, and sometimes it is easier to
+express the policy as something that returns centroids.  The KMeans<> class will
+use whichever of these two functions is given; if both are given, the overload
+that returns centroids will be preferred.
 
-The \c Cluster() method must return valid initial assignments for every point in
-the dataset.
+One alternate to the default SampleInitialization policy is the RefinedStart
+policy, which is an implementation of the Bradley and Fayyad approach for
+finding initial points detailed in "Refined initial points for k-means
+clustering" and other places in this document.  Another option is the
+RandomPartition class, which randomly assigns points to clusters, but this may
+not work very well for most settings.  See the documentation for
+mlpack::kmeans::RefinedStart and mlpack::kmeans::RandomPartition for more
+information.
+
+If the \c Cluster() method returns point assignments instead of centroids, then
+valid initial assignments must be returned for every point in the dataset.
 
 As with the MetricType template parameter, an initialized InitialPartitionPolicy
 can be passed to the constructor of \c KMeans as a fourth argument.
@@ -541,7 +613,7 @@ size_t EmptyCluster(const MatType& data,
                     const size_t emptyCluster,
                     const MatType& centroids,
                     arma::Col<size_t>& clusterCounts,
-                    arma::Col<size_t>& assignments);
+                    arma::Row<size_t>& assignments);
 @endcode
 
 The \c EmptyCluster() function is called for each cluster that is empty at each
@@ -553,6 +625,59 @@ compilation errors.
 Like the other template parameters to \c KMeans, EmptyClusterPolicy
 implementations that have state can be passed to the constructor of \c KMeans as
 a fifth argument.  See the kmeans::KMeans documentation for further details.
+
+@subsection kmeans_lloyd_kmtut The LloydStepType template parameter
+
+The internal algorithm used for a single step of the k-means algorithm can
+easily be changed; \b mlpack implements several existing classes that satisfy
+the \c LloydStepType policy:
+
+ - mlpack::kmeans::NaiveKMeans
+ - mlpack::kmeans::ElkanKMeans
+ - mlpack::kmeans::HamerlyKMeans
+ - mlpack::kmeans::PellegMooreKMeans
+ - mlpack::kmeans::DualTreeKMeans
+
+Note that the \c LloydStepType policy is itself a template template parameter,
+and must accept two template parameters of its own:
+
+ - \c MetricType: the type of metric to use
+ - \c MatType: the type of data matrix to use
+
+The \c LloydStepType policy also mandates three functions:
+
+ - a constructor: \c "LloydStepType(const MatType& dataset, MetricType&
+   metric);"
+ - an \c Iterate() function:
+
+@code
+/**
+ * Run a single iteration of the Lloyd algorithm, updating the given centroids
+ * into the newCentroids matrix.  If any cluster is empty (that is, if any
+ * cluster has no points assigned to it), then the centroid associated with
+ * that cluster may be filled with invalid data (it will be corrected later).
+ *
+ * @param centroids Current cluster centroids.
+ * @param newCentroids New cluster centroids.
+ * @param counts Number of points in each cluster at the end of the iteration.
+ */
+double Iterate(const arma::mat& centroids,
+               arma::mat& newCentroids,
+               arma::Col<size_t>& counts);
+@endcode
+
+ - a function to get the number of distance calculations:
+
+@code
+size_t DistanceCalculations() const { return distanceCalculations; }
+@endcode
+
+Note that \c Iterate() does not need to return valid centroids if the cluster is
+empty.  This is because \c EmptyClusterPolicy will handle the empty centroid.
+This behavior can be used to avoid small amounts of computation.
+
+For examples, see the five aforementioned implementations of classes that
+satisfy the \c LloydStepType policy.
 
 @section further_doc_kmtut Further documentation
 

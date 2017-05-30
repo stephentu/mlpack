@@ -4,6 +4,11 @@
  *
  * Implementation of very simple test function for stochastic gradient descent
  * (SGD).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #include "test_function.hpp"
 
@@ -41,7 +46,7 @@ void SGDTestFunction::Gradient(const arma::mat& coordinates,
       if (coordinates[0] >= 0)
         gradient[0] = std::exp(-coordinates[0]);
       else
-        gradient[0] = -std::exp(coordinates[1]);
+        gradient[0] = -std::exp(coordinates[0]);
       break;
 
     case 1:

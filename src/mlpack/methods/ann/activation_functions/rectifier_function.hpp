@@ -14,11 +14,16 @@
  *   year = {2010}
  * }
  * @endcode
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_ANN_ACTIVATION_FUNCTIONS_RECTIFIER_FUNCTION_HPP
-#define __MLPACK_METHODS_ANN_ACTIVATION_FUNCTIONS_RECTIFIER_FUNCTION_HPP
+#ifndef MLPACK_METHODS_ANN_ACTIVATION_FUNCTIONS_RECTIFIER_FUNCTION_HPP
+#define MLPACK_METHODS_ANN_ACTIVATION_FUNCTIONS_RECTIFIER_FUNCTION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <algorithm>
 
 namespace mlpack {
@@ -27,15 +32,15 @@ namespace ann /** Artificial Neural Network. */ {
 /**
  * The rectifier function, defined by
  *
- * @f[
+ * @f{eqnarray*}{
  * f(x) &=& \max(0, x) \\
  * f'(x) &=& \left\{
  *   \begin{array}{lr}
  *     1 & : x > 0 \\
  *     0 & : x \le 0
  *   \end{array}
- * \right
- * @f]
+ * \right.
+ * @f}
  */
 class RectifierFunction
 {
@@ -46,22 +51,35 @@ class RectifierFunction
    * @param x Input data.
    * @return f(x).
    */
-  static double fn(const double x)
+  static double Fn(const double x)
   {
     return std::max(0.0, x);
   }
 
   /**
-   * Computes the rectifier function.
+   * Computes the rectifier function using a dense matrix as input.
    *
    * @param x Input data.
    * @param y The resulting output activation.
    */
-  template<typename InputVecType, typename OutputVecType>
-  static void fn(const InputVecType& x, OutputVecType& y)
+  template<typename eT>
+  static void Fn(const arma::Mat<eT>& x, arma::Mat<eT>& y)
+  {
+    y = arma::max(arma::zeros<arma::Mat<eT> >(x.n_rows, x.n_cols), x);
+  }
+
+  /**
+   * Computes the rectifier function using a 3rd-order tensor as input.
+   *
+   * @param x Input data.
+   * @param y The resulting output activation.
+   */
+  template<typename eT>
+  static void Fn(const arma::Cube<eT>& x, arma::Cube<eT>& y)
   {
     y = x;
-    y = arma::max(arma::zeros<OutputVecType>(x.n_elem), x);
+    for (size_t s = 0; s < x.n_slices; s++)
+      Fn(x.slice(s), y.slice(s));
   }
 
   /**
@@ -70,9 +88,9 @@ class RectifierFunction
    * @param x Input data.
    * @return f'(x)
    */
-  static double deriv(const double y)
+  static double Deriv(const double y)
   {
-    return y > 0 ? 1 : 0;
+    return y > 0;
   }
 
   /**
@@ -81,15 +99,17 @@ class RectifierFunction
    * @param y Input activations.
    * @param x The resulting derivatives.
    */
-  template<typename InputVecType, typename OutputVecType>
-  static void deriv(const InputVecType& y, OutputVecType& x)
+  template<typename InputType, typename OutputType>
+  static void Deriv(const InputType& y, OutputType& x)
   {
     x = y;
-    x.transform( [](double y) { return deriv(y); } );
+
+    for (size_t i = 0; i < y.n_elem; i++)
+      x(i) = Deriv(y(i));
   }
 }; // class RectifierFunction
 
-}; // namespace ann
-}; // namespace mlpack
+} // namespace ann
+} // namespace mlpack
 
 #endif

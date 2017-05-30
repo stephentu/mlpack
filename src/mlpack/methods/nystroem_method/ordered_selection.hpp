@@ -5,11 +5,16 @@
  * Select the first points of the dataset for use in the Nystroem method of
  * kernel matrix approximation. This is mostly for testing, but might have
  * other uses.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_NYSTROEM_METHOD_ORDERED_SELECTION_HPP
-#define __MLPACK_METHODS_NYSTROEM_METHOD_ORDERED_SELECTION_HPP
+#ifndef MLPACK_METHODS_NYSTROEM_METHOD_ORDERED_SELECTION_HPP
+#define MLPACK_METHODS_NYSTROEM_METHOD_ORDERED_SELECTION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace kernel {
@@ -32,7 +37,7 @@ class OrderedSelection
   }
 };
 
-}; // namespace kernel
-}; // namespace mlpack
+} // namespace kernel
+} // namespace mlpack
 
 #endif

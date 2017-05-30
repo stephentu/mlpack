@@ -4,9 +4,14 @@
  * @author Ryan Curtin
  *
  * The implementation of the L_BFGS optimizer.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_IMPL_HPP
-#define __MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_IMPL_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_IMPL_HPP
+#define MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_IMPL_HPP
 
 namespace mlpack {
 namespace optimization {
@@ -221,15 +226,7 @@ bool L_BFGS<FunctionType>::LineSearch(double& functionValue,
     const bool cond2 = (stepSize > maxStep);
     const bool cond3 = (numIterations >= maxLineSearchTrials);
     if (cond1 || cond2 || cond3)
-    {
-      if (cond1)
-        Log::Debug << "stepSize < minStep" << std::endl;
-      if (cond2)
-        Log::Debug << "stepSize > maxStep" << std::endl;
-      if (cond3)
-        Log::Debug << "numIterations >= maxLineSearchTrials (stepSize=" << stepSize << ")" << std::endl;
       break;
-    }
 
     // Scale the step size.
     stepSize *= width;
@@ -329,9 +326,11 @@ L_BFGS<FunctionType>::MinPointIterate() const
 }
 
 template<typename FunctionType>
-inline double L_BFGS<FunctionType>::Optimize(arma::mat& iterate)
+inline double L_BFGS<FunctionType>::Optimize(arma::mat& iterate,
+                                             const size_t maxIterations)
 {
-  return Optimize(iterate, maxIterations);
+  this->maxIterations = maxIterations;
+  return Optimize(iterate);
 }
 
 /**
@@ -344,8 +343,7 @@ inline double L_BFGS<FunctionType>::Optimize(arma::mat& iterate)
  * @param iterate Starting point (will be modified)
  */
 template<typename FunctionType>
-double L_BFGS<FunctionType>::Optimize(arma::mat& iterate,
-                                      const size_t maxIterations)
+double L_BFGS<FunctionType>::Optimize(arma::mat& iterate)
 {
   // Ensure that the cubes holding past iterations' information are the right
   // size.  Also set the current best point value to the maximum.
@@ -388,7 +386,8 @@ double L_BFGS<FunctionType>::Optimize(arma::mat& iterate,
         function.Evaluate(iterate) << ", gradient norm " <<
         arma::norm(gradient, 2) << ", " <<
         ((prevFunctionValue - functionValue) /
-         std::max(std::max(fabs(prevFunctionValue), fabs(functionValue)), 1.0)) << "." << std::endl;
+         std::max(std::max(fabs(prevFunctionValue), fabs(functionValue)), 1.0))
+        << "." << std::endl;
 
     prevFunctionValue = functionValue;
 
@@ -399,6 +398,15 @@ double L_BFGS<FunctionType>::Optimize(arma::mat& iterate,
     if (itNum > 0 && GradientNormTooSmall(gradient))
     {
       Log::Debug << "L-BFGS gradient norm too small (terminating successfully)."
+          << std::endl;
+      break;
+    }
+
+    // Break if the objective is not a number.
+    if (std::isnan(functionValue))
+    {
+      Log::Warn << "L-BFGS terminated with objective " << functionValue << "; "
+          << "are the objective and gradient functions implemented correctly?"
           << std::endl;
       break;
     }
@@ -431,7 +439,7 @@ double L_BFGS<FunctionType>::Optimize(arma::mat& iterate,
     }
 
     // If we can't make progress on the gradient, then we'll also accept
-    // a stable function value
+    // a stable function value.
     const double denom =
       std::max(
         std::max(fabs(prevFunctionValue), fabs(functionValue)),
@@ -445,34 +453,13 @@ double L_BFGS<FunctionType>::Optimize(arma::mat& iterate,
 
     // Overwrite an old basis set.
     UpdateBasisSet(itNum, iterate, oldIterate, gradient, oldGradient);
-
   } // End of the optimization loop.
 
   return function.Evaluate(iterate);
 }
 
-// Convert the object to a string.
-template<typename FunctionType>
-std::string L_BFGS<FunctionType>::ToString() const
-{
-  std::ostringstream convert;
-  convert << "L_BFGS [" << this << "]" << std::endl;
-  convert << "  Function:" << std::endl;
-  convert << util::Indent(function.ToString(), 2);
-  convert << "  Memory size: " << numBasis << std::endl;
-  convert << "  Cube size: " << s.n_rows << "x" << s.n_cols << "x"
-      << s.n_slices << std::endl;
-  convert << "  Maximum iterations: " << maxIterations << std::endl;
-  convert << "  Armijo condition constant: " << armijoConstant << std::endl;
-  convert << "  Wolfe parameter: " << wolfe << std::endl;
-  convert << "  Minimum gradient norm: " << minGradientNorm << std::endl;
-  convert << "  Minimum step for line search: " << minStep << std::endl;
-  convert << "  Maximum step for line search: " << maxStep << std::endl;
-  return convert.str();
-}
+} // namespace optimization
+} // namespace mlpack
 
-}; // namespace optimization
-}; // namespace mlpack
-
-#endif // __MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_IMPL_HPP
+#endif // MLPACK_CORE_OPTIMIZERS_LBFGS_LBFGS_IMPL_HPP
 

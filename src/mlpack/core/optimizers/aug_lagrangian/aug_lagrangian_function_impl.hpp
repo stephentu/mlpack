@@ -5,9 +5,14 @@
  * Simple, naive implementation of AugLagrangianFunction.  Better
  * specializations can probably be given in many cases, but this is the most
  * general case.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_FUNCTION_IMPL_HPP
-#define __MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_FUNCTION_IMPL_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_FUNCTION_IMPL_HPP
+#define MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_FUNCTION_IMPL_HPP
 
 // In case it hasn't been included.
 #include "aug_lagrangian_function.hpp"
@@ -95,20 +100,8 @@ const arma::mat& AugLagrangianFunction<LagrangianFunction>::GetInitialPoint()
   return function.GetInitialPoint();
 }
 
-// Convert the object to a string.
-template<typename LagrangianFunction>
-std::string AugLagrangianFunction<LagrangianFunction>::ToString() const
-{
-  std::ostringstream convert;
-  convert << "AugLagrangianFunction [" << this << "]" << std::endl;
-  convert << "  Lagrange multipliers:" << std::endl;
-  convert << lambda;
-  convert << "  Penalty parameter: " << sigma << std::endl;
-  return convert.str();
-}
-
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack
 
 #endif
 

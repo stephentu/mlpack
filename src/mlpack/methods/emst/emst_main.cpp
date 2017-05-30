@@ -18,11 +18,16 @@
  *   year = {2010}
  * }
  * @endcode
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-
 #include "dtb.hpp"
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
+#include <mlpack/core/util/cli.hpp>
 
 PROGRAM_INFO("Fast Euclidean Minimum Spanning Tree", "This program can compute "
     "the Euclidean minimum spanning tree of a set of input points using the "
@@ -33,27 +38,28 @@ PROGRAM_INFO("Fast Euclidean Minimum Spanning Tree", "This program can compute "
     "second column corresponds to the greater index of the edge; and the third "
     "column corresponds to the distance between the two points.");
 
-PARAM_STRING_REQ("input_file", "Data input file.", "i");
-PARAM_STRING("output_file", "Data output file.  Stored as an edge list.", "o",
-    "emst_output.csv");
+PARAM_MATRIX_IN_REQ("input", "Input data matrix.", "i");
+PARAM_MATRIX_OUT("output", "Output data.  Stored as an edge list.", "o");
 PARAM_FLAG("naive", "Compute the MST using O(n^2) naive algorithm.", "n");
-PARAM_INT("leaf_size", "Leaf size in the kd-tree.  One-element leaves give the "
-    "empirically best performance, but at the cost of greater memory "
+PARAM_INT_IN("leaf_size", "Leaf size in the kd-tree.  One-element leaves give "
+    "the empirically best performance, but at the cost of greater memory "
     "requirements.", "l", 1);
 
 using namespace mlpack;
 using namespace mlpack::emst;
 using namespace mlpack::tree;
+using namespace mlpack::metric;
 using namespace std;
 
 int main(int argc, char* argv[])
 {
   CLI::ParseCommandLine(argc, argv);
 
-  const string dataFilename = CLI::GetParam<string>("input_file");
+  if (!CLI::HasParam("output"))
+    Log::Warn << "--output_file is not specified, so no output will be saved!"
+        << endl;
 
-  arma::mat dataPoints;
-  data::Load(dataFilename, dataPoints, true);
+  arma::mat dataPoints = std::move(CLI::GetParam<arma::mat>("input"));
 
   // Do naive computation if necessary.
   if (CLI::GetParam<bool>("naive"))
@@ -65,9 +71,8 @@ int main(int argc, char* argv[])
     arma::mat naiveResults;
     naive.ComputeMST(naiveResults);
 
-    const string outputFilename = CLI::GetParam<string>("output_file");
-
-    data::Save(outputFilename, naiveResults, true);
+    if (CLI::HasParam("output"))
+      CLI::GetParam<arma::mat>("output") = std::move(naiveResults);
   }
   else
   {
@@ -86,12 +91,12 @@ int main(int argc, char* argv[])
 
     Timer::Start("tree_building");
     std::vector<size_t> oldFromNew;
-    tree::BinarySpaceTree<bound::HRectBound<2>, DTBStat> tree(dataPoints,
-        oldFromNew, leafSize);
+    KDTree<EuclideanDistance, DTBStat, arma::mat> tree(dataPoints, oldFromNew,
+        leafSize);
     metric::LMetric<2, true> metric;
     Timer::Stop("tree_building");
 
-    DualTreeBoruvka<> dtb(&tree, dataPoints, metric);
+    DualTreeBoruvka<> dtb(&tree, metric);
 
     // Run the DTB algorithm.
     Log::Info << "Calculating minimum spanning tree." << endl;
@@ -119,9 +124,7 @@ int main(int argc, char* argv[])
       unmappedResults(2, i) = results(2, i);
     }
 
-    // Output the results.
-    const string outputFilename = CLI::GetParam<string>("output_file");
-
-    data::Save(outputFilename, unmappedResults, true);
+    if (CLI::HasParam("output"))
+      CLI::GetParam<arma::mat>("output") = std::move(unmappedResults);
   }
 }

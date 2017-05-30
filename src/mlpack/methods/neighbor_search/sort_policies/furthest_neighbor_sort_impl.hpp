@@ -4,9 +4,14 @@
  *
  * Implementation of templated methods for the FurthestNeighborSort SortPolicy
  * class for the NeighborSearch class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_NEIGHBOR_SEARCH_FURTHEST_NEIGHBOR_SORT_IMPL_HPP
-#define __MLPACK_METHODS_NEIGHBOR_SEARCH_FURTHEST_NEIGHBOR_SORT_IMPL_HPP
+#ifndef MLPACK_METHODS_NEIGHBOR_SEARCH_FURTHEST_NEIGHBOR_SORT_IMPL_HPP
+#define MLPACK_METHODS_NEIGHBOR_SEARCH_FURTHEST_NEIGHBOR_SORT_IMPL_HPP
 
 namespace mlpack {
 namespace neighbor {
@@ -18,7 +23,7 @@ inline double FurthestNeighborSort::BestNodeToNodeDistance(
 {
   // This is not implemented yet for the general case because the trees do not
   // accept arbitrary distance metrics.
-  return queryNode->MaxDistance(referenceNode);
+  return queryNode->MaxDistance(*referenceNode);
 }
 
 template<typename TreeType>
@@ -27,7 +32,7 @@ inline double FurthestNeighborSort::BestNodeToNodeDistance(
     const TreeType* referenceNode,
     const double centerToCenterDistance)
 {
-  return queryNode->MaxDistance(referenceNode, centerToCenterDistance);
+  return queryNode->MaxDistance(*referenceNode, centerToCenterDistance);
 }
 
 template<typename TreeType>
@@ -37,7 +42,7 @@ inline double FurthestNeighborSort::BestNodeToNodeDistance(
     const TreeType* referenceChildNode,
     const double centerToCenterDistance)
 {
-  return queryNode->MaxDistance(referenceNode, centerToCenterDistance) +
+  return queryNode->MaxDistance(*referenceNode, centerToCenterDistance) +
       referenceChildNode->ParentDistance();
 }
 
@@ -60,7 +65,7 @@ inline double FurthestNeighborSort::BestPointToNodeDistance(
   return referenceNode->MaxDistance(point, pointToCenterDistance);
 }
 
-}; // namespace neighbor
-}; // namespace mlpack
+} // namespace neighbor
+} // namespace mlpack
 
 #endif

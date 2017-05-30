@@ -3,9 +3,16 @@
  * @author Nishant Mehta
  *
  * Implementation of Radical class
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 
 #include "radical.hpp"
+#include <mlpack/core/util/log.hpp>
+#include <mlpack/core/util/timers.hpp>
 
 using namespace std;
 using namespace arma;
@@ -85,7 +92,7 @@ double Radical::DoRadical2D(const mat& matX)
     values(i) = Vasicek(candidateY1) + Vasicek(candidateY2);
   }
 
-  uword indOpt;
+  uword indOpt = 0;
   values.min(indOpt); // we ignore the return value; we don't care about it
   return (indOpt / (double) angles) * M_PI / 2.0;
 }
@@ -183,16 +190,4 @@ void mlpack::radical::WhitenFeatureMajorMatrix(const mat& matX,
   svd(matU, s, matV, cov(matX));
   matWhitening = matU * diagmat(1 / sqrt(s)) * trans(matV);
   matXWhitened = matX * matWhitening;
-}
-
-// return a string of this object.
-std::string Radical::ToString() const
-{
-  std::ostringstream convert;
-  convert << "Radical  [" << this << "]" << std::endl;
-  convert << "  StdDev of Noise: " << noiseStdDev << std::endl;
-  convert << "  Number of Replicates: " << replicates << std::endl;
-  convert << "  Number of Angles: " << angles << std::endl;
-  convert << "  M value: " << m << std::endl;
-  return convert.str();
 }

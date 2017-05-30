@@ -4,11 +4,16 @@
  *
  * An implementation of Monteiro and Burer's formulation of low-rank
  * semidefinite programs (LR-SDP).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_HPP
-#define __MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_HPP
+#define MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/core/optimizers/aug_lagrangian/aug_lagrangian.hpp>
 
 #include "lrsdp_function.hpp"
@@ -72,9 +77,6 @@ class LRSDP
   //! Modify the augmented Lagrangian object.
   AugLagrangian<LRSDPFunction<SDPType>>& AugLag() { return augLag; }
 
-  //! Return a string representation of the object.
-  std::string ToString() const;
-
  private:
   //! Function to optimize, which the AugLagrangian object holds.
   LRSDPFunction<SDPType> function;
@@ -83,8 +85,8 @@ class LRSDP
   AugLagrangian<LRSDPFunction<SDPType>> augLag;
 };
 
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack
 
 // Include implementation
 #include "lrsdp_impl.hpp"

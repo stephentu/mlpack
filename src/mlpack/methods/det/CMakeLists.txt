@@ -4,11 +4,11 @@
 set(SOURCES
   # the DET class
   dtree.hpp
-  dtree.cpp
+  dtree_impl.hpp
 
-  # the util file
+  # Utility files
   dt_utils.hpp
-  dt_utils.cpp
+  dt_utils_impl.hpp
 )
 
 # add directory name to sources
@@ -16,15 +16,7 @@ set(DIR_SRCS)
 foreach(file ${SOURCES})
   set(DIR_SRCS ${DIR_SRCS} ${CMAKE_CURRENT_SOURCE_DIR}/${file})
 endforeach()
-# append sources (with directory name) to list of all MLPACK sources (used at the parent scope)
+# append sources (with directory name) to list of all mlpack sources (used at the parent scope)
 set(MLPACK_SRCS ${MLPACK_SRCS} ${DIR_SRCS} PARENT_SCOPE)
 
-# executable
-add_executable(det
-  det_main.cpp
-)
-# link dependencies of executable
-target_link_libraries(det
-  mlpack
-)
-install(TARGETS det RUNTIME DESTINATION bin)
+add_cli_executable(det)

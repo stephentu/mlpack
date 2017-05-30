@@ -2,14 +2,19 @@
  * @file binary_space_tree.hpp
  *
  * Definition of generalized binary space partitioning tree (BinarySpaceTree).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_TREE_BINARY_SPACE_TREE_BINARY_SPACE_TREE_HPP
-#define __MLPACK_CORE_TREE_BINARY_SPACE_TREE_BINARY_SPACE_TREE_HPP
+#ifndef MLPACK_CORE_TREE_BINARY_SPACE_TREE_BINARY_SPACE_TREE_HPP
+#define MLPACK_CORE_TREE_BINARY_SPACE_TREE_BINARY_SPACE_TREE_HPP
 
-#include <mlpack/core.hpp>
-#include "mean_split.hpp"
+#include <mlpack/prereqs.hpp>
 
 #include "../statistic.hpp"
+#include "midpoint_split.hpp"
 
 namespace mlpack {
 namespace tree /** Trees and tree-building procedures. */ {
@@ -27,22 +32,35 @@ namespace tree /** Trees and tree-building procedures. */ {
  * This tree does take one runtime parameter in the constructor, which is the
  * max leaf size to be used.
  *
- * @tparam BoundType The bound used for each node.  The valid types of bounds
- *     and the necessary skeleton interface for this class can be found in
- *     bounds/.
+ * @tparam MetricType The metric used for tree-building.  The BoundType may
+ *     place restrictions on the metrics that can be used.
  * @tparam StatisticType Extra data contained in the node.  See statistic.hpp
  *     for the necessary skeleton interface.
  * @tparam MatType The dataset class.
+ * @tparam BoundType The bound used for each node.  HRectBound, the default,
+ *     requires that an LMetric<> is used for MetricType (so, EuclideanDistance,
+ *     ManhattanDistance, etc.).
  * @tparam SplitType The class that partitions the dataset/points at a
  *     particular node into two parts. Its definition decides the way this split
  *     is done.
  */
-template<typename BoundType,
+template<typename MetricType,
          typename StatisticType = EmptyStatistic,
          typename MatType = arma::mat,
-         typename SplitType = MeanSplit<BoundType, MatType> >
+         template<typename BoundMetricType, typename...> class BoundType =
+            bound::HRectBound,
+         template<typename SplitBoundType, typename SplitMatType>
+            class SplitType = MidpointSplit>
 class BinarySpaceTree
 {
+ public:
+  //! So other classes can use TreeType::Mat.
+  typedef MatType Mat;
+  //! The type of element held in MatType.
+  typedef typename MatType::elem_type ElemType;
+
+  typedef SplitType<BoundType<MetricType>, MatType> Split;
+
  private:
   //! The left child node.
   BinarySpaceTree* left;
@@ -56,28 +74,22 @@ class BinarySpaceTree
   //! The number of points of the dataset contained in this node (and its
   //! children).
   size_t count;
-  //! The max leaf size.
-  size_t maxLeafSize;
   //! The bound object for this node.
-  BoundType bound;
+  BoundType<MetricType> bound;
   //! Any extra data contained in the node.
   StatisticType stat;
-  //! The dimension this node split on if it is a parent.
-  size_t splitDimension;
   //! The distance from the centroid of this node to the centroid of the parent.
-  double parentDistance;
+  ElemType parentDistance;
   //! The worst possible distance to the furthest descendant, cached to speed
   //! things up.
-  double furthestDescendantDistance;
+  ElemType furthestDescendantDistance;
   //! The minimum distance from the center to any edge of the bound.
-  double minimumBoundDistance;
-  //! The dataset.
-  MatType& dataset;
+  ElemType minimumBoundDistance;
+  //! The dataset.  If we are the root of the tree, we own the dataset and must
+  //! delete it.
+  MatType* dataset;
 
  public:
-  //! So other classes can use TreeType::Mat.
-  typedef MatType Mat;
-
   //! A single-tree traverser for binary space trees; see
   //! single_tree_traverser.hpp for implementation.
   template<typename RuleType>
@@ -92,92 +104,147 @@ class BinarySpaceTree
 
   /**
    * Construct this as the root node of a binary space tree using the given
-   * dataset.  This will modify the ordering of the points in the dataset!
+   * dataset.  This will copy the input matrix; if you don't want this, consider
+   * using the constructor that takes an rvalue reference and use std::move().
    *
-   * @param data Dataset to create tree from.  This will be modified!
+   * @param data Dataset to create tree from.  This will be copied!
    * @param maxLeafSize Size of each leaf in the tree.
    */
-  BinarySpaceTree(MatType& data, const size_t maxLeafSize = 20);
+  BinarySpaceTree(const MatType& data, const size_t maxLeafSize = 20);
 
   /**
    * Construct this as the root node of a binary space tree using the given
-   * dataset.  This will modify the ordering of points in the dataset!  A
-   * mapping of the old point indices to the new point indices is filled.
+   * dataset.  This will copy the input matrix and modify its ordering; a
+   * mapping of the old point indices to the new point indices is filled.  If
+   * you don't want the matrix to be copied, consider using the constructor that
+   * takes an rvalue reference and use std::move().
    *
-   * @param data Dataset to create tree from.  This will be modified!
+   * @param data Dataset to create tree from.  This will be copied!
    * @param oldFromNew Vector which will be filled with the old positions for
    *     each new point.
    * @param maxLeafSize Size of each leaf in the tree.
    */
-  BinarySpaceTree(MatType& data,
+  BinarySpaceTree(const MatType& data,
                   std::vector<size_t>& oldFromNew,
                   const size_t maxLeafSize = 20);
 
   /**
    * Construct this as the root node of a binary space tree using the given
-   * dataset.  This will modify the ordering of points in the dataset!  A
+   * dataset.  This will copy the input matrix and modify its ordering; a
    * mapping of the old point indices to the new point indices is filled, as
-   * well as a mapping of the new point indices to the old point indices.
+   * well as a mapping of the new point indices to the old point indices.  If
+   * you don't want the matrix to be copied, consider using the constructor that
+   * takes an rvalue reference and use std::move().
    *
-   * @param data Dataset to create tree from.  This will be modified!
+   * @param data Dataset to create tree from.  This will be copied!
    * @param oldFromNew Vector which will be filled with the old positions for
    *     each new point.
    * @param newFromOld Vector which will be filled with the new positions for
    *     each old point.
    * @param maxLeafSize Size of each leaf in the tree.
    */
-  BinarySpaceTree(MatType& data,
+  BinarySpaceTree(const MatType& data,
                   std::vector<size_t>& oldFromNew,
                   std::vector<size_t>& newFromOld,
                   const size_t maxLeafSize = 20);
 
   /**
-   * Construct this node on a subset of the given matrix, starting at column
-   * begin and using count points.  The ordering of that subset of points
-   * will be modified!  This is used for recursive tree-building by the other
-   * constructors which don't specify point indices.
+   * Construct this as the root node of a binary space tree using the given
+   * dataset.  This will take ownership of the data matrix; if you don't want
+   * this, consider using the constructor that takes a const reference to a
+   * dataset.
    *
-   * @param data Dataset to create tree from.  This will be modified!
-   * @param begin Index of point to start tree construction with.
-   * @param count Number of points to use to construct tree.
+   * @param data Dataset to create tree from.
    * @param maxLeafSize Size of each leaf in the tree.
    */
-  BinarySpaceTree(MatType& data,
-                  const size_t begin,
-                  const size_t count,
-                  BinarySpaceTree* parent = NULL,
+  BinarySpaceTree(MatType&& data,
                   const size_t maxLeafSize = 20);
 
   /**
-   * Construct this node on a subset of the given matrix, starting at column
-   * begin_in and using count_in points.  The ordering of that subset of points
-   * will be modified!  This is used for recursive tree-building by the other
-   * constructors which don't specify point indices.
+   * Construct this as the root node of a binary space tree using the given
+   * dataset.  This will take ownership of the data matrix; a mapping of the
+   * old point indices to the new point indices is filled.  If you don't want
+   * the matrix to have its ownership taken, consider using the constructor that
+   * takes a const reference to a dataset.
    *
-   * A mapping of the old point indices to the new point indices is filled, but
-   * it is expected that the vector is already allocated with size greater than
-   * or equal to (begin_in + count_in), and if that is not true, invalid memory
-   * reads (and writes) will occur.
-   *
-   * @param data Dataset to create tree from.  This will be modified!
-   * @param begin Index of point to start tree construction with.
-   * @param count Number of points to use to construct tree.
+   * @param data Dataset to create tree from.
    * @param oldFromNew Vector which will be filled with the old positions for
    *     each new point.
    * @param maxLeafSize Size of each leaf in the tree.
    */
-  BinarySpaceTree(MatType& data,
-                  const size_t begin,
-                  const size_t count,
+  BinarySpaceTree(MatType&& data,
                   std::vector<size_t>& oldFromNew,
-                  BinarySpaceTree* parent = NULL,
                   const size_t maxLeafSize = 20);
 
   /**
-   * Construct this node on a subset of the given matrix, starting at column
-   * begin_in and using count_in points.  The ordering of that subset of points
-   * will be modified!  This is used for recursive tree-building by the other
-   * constructors which don't specify point indices.
+   * Construct this as the root node of a binary space tree using the given
+   * dataset.  This will take ownership of the data matrix; a mapping of the old
+   * point indices to the new point indices is filled, as well as a mapping of
+   * the new point indices to the old point indices.  If you don't want the
+   * matrix to have its ownership taken, consider using the constructor that
+   * takes a const reference to a dataset.
+   *
+   * @param data Dataset to create tree from.
+   * @param oldFromNew Vector which will be filled with the old positions for
+   *     each new point.
+   * @param newFromOld Vector which will be filled with the new positions for
+   *     each old point.
+   * @param maxLeafSize Size of each leaf in the tree.
+   */
+  BinarySpaceTree(MatType&& data,
+                  std::vector<size_t>& oldFromNew,
+                  std::vector<size_t>& newFromOld,
+                  const size_t maxLeafSize = 20);
+
+  /**
+   * Construct this node as a child of the given parent, starting at column
+   * begin and using count points.  The ordering of that subset of points in the
+   * parent's data matrix will be modified!  This is used for recursive
+   * tree-building by the other constructors which don't specify point indices.
+   *
+   * @param parent Parent of this node.  Its dataset will be modified!
+   * @param begin Index of point to start tree construction with.
+   * @param count Number of points to use to construct tree.
+   * @param splitter Instantiated node splitter object.
+   * @param maxLeafSize Size of each leaf in the tree.
+   */
+  BinarySpaceTree(BinarySpaceTree* parent,
+                  const size_t begin,
+                  const size_t count,
+                  SplitType<BoundType<MetricType>, MatType>& splitter,
+                  const size_t maxLeafSize = 20);
+
+  /**
+   * Construct this node as a child of the given parent, starting at column
+   * begin and using count points.  The ordering of that subset of points in the
+   * parent's data matrix will be modified!  This is used for recursive
+   * tree-building by the other constructors which don't specify point indices.
+   *
+   * A mapping of the old point indices to the new point indices is filled, but
+   * it is expected that the vector is already allocated with size greater than
+   * or equal to (begin + count), and if that is not true, invalid memory reads
+   * (and writes) will occur.
+   *
+   * @param parent Parent of this node.  Its dataset will be modified!
+   * @param begin Index of point to start tree construction with.
+   * @param count Number of points to use to construct tree.
+   * @param oldFromNew Vector which will be filled with the old positions for
+   *     each new point.
+   * @param splitter Instantiated node splitter object.
+   * @param maxLeafSize Size of each leaf in the tree.
+   */
+  BinarySpaceTree(BinarySpaceTree* parent,
+                  const size_t begin,
+                  const size_t count,
+                  std::vector<size_t>& oldFromNew,
+                  SplitType<BoundType<MetricType>, MatType>& splitter,
+                  const size_t maxLeafSize = 20);
+
+  /**
+   * Construct this node as a child of the given parent, starting at column
+   * begin and using count points.  The ordering of that subset of points in the
+   * parent's data matrix will be modified!  This is used for recursive
+   * tree-building by the other constructors which don't specify point indices.
    *
    * A mapping of the old point indices to the new point indices is filled, as
    * well as a mapping of the new point indices to the old point indices.  It is
@@ -185,7 +252,7 @@ class BinarySpaceTree
    * equal to (begin_in + count_in), and if that is not true, invalid memory
    * reads (and writes) will occur.
    *
-   * @param data Dataset to create tree from.  This will be modified!
+   * @param parent Parent of this node.  Its dataset will be modified!
    * @param begin Index of point to start tree construction with.
    * @param count Number of points to use to construct tree.
    * @param oldFromNew Vector which will be filled with the old positions for
@@ -194,12 +261,12 @@ class BinarySpaceTree
    *     each old point.
    * @param maxLeafSize Size of each leaf in the tree.
    */
-  BinarySpaceTree(MatType& data,
+  BinarySpaceTree(BinarySpaceTree* parent,
                   const size_t begin,
                   const size_t count,
                   std::vector<size_t>& oldFromNew,
                   std::vector<size_t>& newFromOld,
-                  BinarySpaceTree* parent = NULL,
+                  SplitType<BoundType<MetricType>, MatType>& splitter,
                   const size_t maxLeafSize = 20);
 
   /**
@@ -211,43 +278,32 @@ class BinarySpaceTree
   BinarySpaceTree(const BinarySpaceTree& other);
 
   /**
+   * Move constructor for a BinarySpaceTree; possess all the members of the
+   * given tree.
+   */
+  BinarySpaceTree(BinarySpaceTree&& other);
+
+  /**
+   * Initialize the tree from a boost::serialization archive.
+   *
+   * @param ar Archive to load tree from.  Must be an iarchive, not an oarchive.
+   */
+  template<typename Archive>
+  BinarySpaceTree(
+      Archive& ar,
+      const typename std::enable_if_t<Archive::is_loading::value>* = 0);
+
+  /**
    * Deletes this node, deallocating the memory for the children and calling
    * their destructors in turn.  This will invalidate any pointers or references
    * to any nodes which are children of this one.
    */
   ~BinarySpaceTree();
 
-  /**
-   * Find a node in this tree by its begin and count (const).
-   *
-   * Every node is uniquely identified by these two numbers.
-   * This is useful for communicating position over the network,
-   * when pointers would be invalid.
-   *
-   * @param begin The begin() of the node to find.
-   * @param count The count() of the node to find.
-   * @return The found node, or NULL if not found.
-   */
-  const BinarySpaceTree* FindByBeginCount(size_t begin,
-                                          size_t count) const;
-
-  /**
-   * Find a node in this tree by its begin and count.
-   *
-   * Every node is uniquely identified by these two numbers.
-   * This is useful for communicating position over the network,
-   * when pointers would be invalid.
-   *
-   * @param begin The begin() of the node to find.
-   * @param count The count() of the node to find.
-   * @return The found node, or NULL if not found.
-   */
-  BinarySpaceTree* FindByBeginCount(size_t begin, size_t count);
-
   //! Return the bound object for this node.
-  const BoundType& Bound() const { return bound; }
+  const BoundType<MetricType>& Bound() const { return bound; }
   //! Return the bound object for this node.
-  BoundType& Bound() { return bound; }
+  BoundType<MetricType>& Bound() { return bound; }
 
   //! Return the statistic object for this node.
   const StatisticType& Stat() const { return stat; }
@@ -256,14 +312,6 @@ class BinarySpaceTree
 
   //! Return whether or not this node is a leaf (true if it has no children).
   bool IsLeaf() const;
-
-  //! Return the max leaf size.
-  size_t MaxLeafSize() const { return maxLeafSize; }
-  //! Modify the max leaf size.
-  size_t& MaxLeafSize() { return maxLeafSize; }
-
-  //! Fills the tree to the specified level.
-  size_t ExtendTree(const size_t level);
 
   //! Gets the left child of this node.
   BinarySpaceTree* Left() const { return left; }
@@ -280,30 +328,52 @@ class BinarySpaceTree
   //! Modify the parent of this node.
   BinarySpaceTree*& Parent() { return parent; }
 
-  //! Get the split dimension for this node.
-  size_t SplitDimension() const { return splitDimension; }
-  //! Modify the split dimension for this node.
-  size_t& SplitDimension() { return splitDimension; }
-
   //! Get the dataset which the tree is built on.
-  const MatType& Dataset() const { return dataset; }
+  const MatType& Dataset() const { return *dataset; }
   //! Modify the dataset which the tree is built on.  Be careful!
-  MatType& Dataset() { return dataset; }
+  MatType& Dataset() { return *dataset; }
 
-  //! Get the metric which the tree uses.
-  typename BoundType::MetricType Metric() const { return bound.Metric(); }
-
-  //! Get the centroid of the node and store it in the given vector.
-  void Centroid(arma::vec& centroid) { bound.Centroid(centroid); }
+  //! Get the metric that the tree uses.
+  MetricType Metric() const { return MetricType(); }
 
   //! Return the number of children in this node.
   size_t NumChildren() const;
 
   /**
+   * Return the index of the nearest child node to the given query point.  If
+   * this is a leaf node, it will return NumChildren() (invalid index).
+   */
+  template<typename VecType>
+  size_t GetNearestChild(
+      const VecType& point,
+      typename std::enable_if_t<IsVector<VecType>::value>* = 0);
+
+  /**
+   * Return the index of the furthest child node to the given query point.  If
+   * this is a leaf node, it will return NumChildren() (invalid index).
+   */
+  template<typename VecType>
+  size_t GetFurthestChild(
+      const VecType& point,
+      typename std::enable_if_t<IsVector<VecType>::value>* = 0);
+
+  /**
+   * Return the index of the nearest child node to the given query node.  If it
+   * can't decide, it will return NumChildren() (invalid index).
+   */
+  size_t GetNearestChild(const BinarySpaceTree& queryNode);
+
+  /**
+   * Return the index of the furthest child node to the given query node.  If it
+   * can't decide, it will return NumChildren() (invalid index).
+   */
+  size_t GetFurthestChild(const BinarySpaceTree& queryNode);
+
+  /**
    * Return the furthest distance to a point held in this node.  If this is not
    * a leaf node, then the distance is 0 because the node holds no points.
    */
-  double FurthestPointDistance() const;
+  ElemType FurthestPointDistance() const;
 
   /**
    * Return the furthest possible descendant distance.  This returns the maximum
@@ -312,17 +382,17 @@ class BinarySpaceTree
    * furthest descendant distance may be less than what this method returns (but
    * it will never be greater than this).
    */
-  double FurthestDescendantDistance() const;
+  ElemType FurthestDescendantDistance() const;
 
   //! Return the minimum distance from the center of the node to any bound edge.
-  double MinimumBoundDistance() const;
+  ElemType MinimumBoundDistance() const;
 
   //! Return the distance from the center of this node to the center of the
   //! parent node.
-  double ParentDistance() const { return parentDistance; }
+  ElemType ParentDistance() const { return parentDistance; }
   //! Modify the distance from the center of this node to the center of the
   //! parent node.
-  double& ParentDistance() { return parentDistance; }
+  ElemType& ParentDistance() { return parentDistance; }
 
   /**
    * Return the specified child (0 will be left, 1 will be right).  If the index
@@ -365,27 +435,27 @@ class BinarySpaceTree
   size_t Point(const size_t index) const;
 
   //! Return the minimum distance to another node.
-  double MinDistance(const BinarySpaceTree* other) const
+  ElemType MinDistance(const BinarySpaceTree& other) const
   {
-    return bound.MinDistance(other->Bound());
+    return bound.MinDistance(other.Bound());
   }
 
   //! Return the maximum distance to another node.
-  double MaxDistance(const BinarySpaceTree* other) const
+  ElemType MaxDistance(const BinarySpaceTree& other) const
   {
-    return bound.MaxDistance(other->Bound());
+    return bound.MaxDistance(other.Bound());
   }
 
   //! Return the minimum and maximum distance to another node.
-  math::Range RangeDistance(const BinarySpaceTree* other) const
+  math::RangeType<ElemType> RangeDistance(const BinarySpaceTree& other) const
   {
-    return bound.RangeDistance(other->Bound());
+    return bound.RangeDistance(other.Bound());
   }
 
   //! Return the minimum distance to another point.
   template<typename VecType>
-  double MinDistance(const VecType& point,
-                     typename boost::enable_if<IsVector<VecType> >::type* = 0)
+  ElemType MinDistance(const VecType& point,
+                       typename std::enable_if_t<IsVector<VecType>::value>* = 0)
       const
   {
     return bound.MinDistance(point);
@@ -393,8 +463,8 @@ class BinarySpaceTree
 
   //! Return the maximum distance to another point.
   template<typename VecType>
-  double MaxDistance(const VecType& point,
-                     typename boost::enable_if<IsVector<VecType> >::type* = 0)
+  ElemType MaxDistance(const VecType& point,
+                       typename std::enable_if_t<IsVector<VecType>::value>* = 0)
       const
   {
     return bound.MaxDistance(point);
@@ -402,98 +472,92 @@ class BinarySpaceTree
 
   //! Return the minimum and maximum distance to another point.
   template<typename VecType>
-  math::Range
+  math::RangeType<ElemType>
   RangeDistance(const VecType& point,
-                typename boost::enable_if<IsVector<VecType> >::type* = 0) const
+                typename std::enable_if_t<IsVector<VecType>::value>* = 0) const
   {
     return bound.RangeDistance(point);
   }
-
-  /**
-  * Returns the dimension this parent's children are split on.
-  */
-  size_t GetSplitDimension() const;
-
-  /**
-   * Obtains the number of nodes in the tree, starting with this.
-   */
-  size_t TreeSize() const;
-
-  /**
-   * Obtains the number of levels below this node in the tree, starting with
-   * this.
-   */
-  size_t TreeDepth() const;
 
   //! Return the index of the beginning point of this subset.
   size_t Begin() const { return begin; }
   //! Modify the index of the beginning point of this subset.
   size_t& Begin() { return begin; }
 
-  /**
-   * Gets the index one beyond the last index in the subset.
-   */
-  size_t End() const;
-
   //! Return the number of points in this subset.
   size_t Count() const { return count; }
   //! Modify the number of points in this subset.
   size_t& Count() { return count; }
 
-  //! Returns false: this tree type does not have self children.
-  static bool HasSelfChildren() { return false; }
+  //! Store the center of the bounding region in the given vector.
+  void Center(arma::vec& center) const { bound.Center(center); }
 
  private:
   /**
-   * Private copy constructor, available only to fill (pad) the tree to a
-   * specified level.
-   */
-  BinarySpaceTree(const size_t begin,
-                  const size_t count,
-                  BoundType bound,
-                  StatisticType stat,
-                  const int maxLeafSize = 20) :
-      left(NULL),
-      right(NULL),
-      begin(begin),
-      count(count),
-      bound(bound),
-      stat(stat),
-      maxLeafSize(maxLeafSize) { }
-
-  BinarySpaceTree* CopyMe()
-  {
-    return new BinarySpaceTree(begin, count, bound, stat, maxLeafSize);
-  }
-
-  /**
    * Splits the current node, assigning its left and right children recursively.
    *
-   * @param data Dataset which we are using.
+   * @param maxLeafSize Maximum number of points held in a leaf.
+   * @param splitter Instantiated SplitType object.
    */
-  void SplitNode(MatType& data);
+  void SplitNode(const size_t maxLeafSize,
+                 SplitType<BoundType<MetricType>, MatType>& splitter);
 
   /**
    * Splits the current node, assigning its left and right children recursively.
    * Also returns a list of the changed indices.
    *
-   * @param data Dataset which we are using.
    * @param oldFromNew Vector holding permuted indices.
+   * @param maxLeafSize Maximum number of points held in a leaf.
+   * @param splitter Instantiated SplitType object.
    */
-  void SplitNode(MatType& data, std::vector<size_t>& oldFromNew);
+  void SplitNode(std::vector<size_t>& oldFromNew,
+                 const size_t maxLeafSize,
+                 SplitType<BoundType<MetricType>, MatType>& splitter);
+
+  /**
+   * Update the bound of the current node. This method does not take into
+   * account bound-specific properties.
+   *
+   * @param boundToUpdate The bound to update.
+   */
+  template<typename BoundType2>
+  void UpdateBound(BoundType2& boundToUpdate);
+
+  /**
+   * Update the bound of the current node. This method is designed for
+   * HollowBallBound only.
+   *
+   * @param boundToUpdate The bound to update.
+   */
+  void UpdateBound(bound::HollowBallBound<MetricType>& boundToUpdate);
+
+ protected:
+  /**
+   * A default constructor.  This is meant to only be used with
+   * boost::serialization, which is allowed with the friend declaration below.
+   * This does not return a valid tree!  The method must be protected, so that
+   * the serialization shim can work with the default constructor.
+   */
+  BinarySpaceTree();
+
+  //! Friend access is given for the default constructor.
+  friend class boost::serialization::access;
 
  public:
   /**
-   * Returns a string representation of this object.
+   * Serialize the tree.
    */
-  std::string ToString() const;
-
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int version);
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 // Include implementation.
 #include "binary_space_tree_impl.hpp"
+
+// Include everything else, if necessary.
+#include "../binary_space_tree.hpp"
 
 #endif

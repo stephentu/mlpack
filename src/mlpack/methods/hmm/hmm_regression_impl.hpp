@@ -5,9 +5,14 @@
  * @author Michael Fox
  *
  * Implementation of HMMRegression class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_HMM_HMM_REGRESSION_IMPL_HPP
-#define __MLPACK_METHODS_HMM_HMM_REGRESSION_IMPL_HPP
+#ifndef MLPACK_METHODS_HMM_HMM_REGRESSION_IMPL_HPP
+#define MLPACK_METHODS_HMM_HMM_REGRESSION_IMPL_HPP
 
 // Just in case...
 #include "hmm_regression.hpp"
@@ -25,7 +30,7 @@ void HMMRegression::Train(const std::vector<arma::mat>& predictors,
 
 void HMMRegression::Train(const std::vector<arma::mat>& predictors,
                           const std::vector<arma::vec>& responses,
-                          const std::vector<arma::Col<size_t> >& stateSeq)
+                          const std::vector<arma::Row<size_t> >& stateSeq)
 {
   std::vector<arma::mat> dataSeq;
   StackData(predictors, responses, dataSeq);
@@ -69,7 +74,7 @@ double HMMRegression::Estimate(const arma::mat& predictors,
  */
 double HMMRegression::Predict(const arma::mat& predictors,
                               const arma::vec& responses,
-                              arma::Col<size_t>& stateSeq) const
+                              arma::Row<size_t>& stateSeq) const
 {
   arma::mat dataSeq;
   StackData(predictors, responses, dataSeq);
@@ -101,7 +106,7 @@ void HMMRegression::Filter(const arma::mat& predictors,
   Forward(predictors, responses, scales, forwardProb);
 
   // Propagate state, predictors ahead
-  if(ahead != 0) {
+  if (ahead != 0) {
     forwardProb = pow(transition, ahead)*forwardProb;
     forwardProb = forwardProb.cols(0, forwardProb.n_cols-ahead-1);
   }
@@ -185,7 +190,7 @@ void HMMRegression::StackData(const arma::mat& predictors,
   dataSeq.insert_rows(0, responses.t());
 }
 
-}; // namespace hmm
-}; // namespace mlpack
+} // namespace hmm
+} // namespace mlpack
 
 #endif

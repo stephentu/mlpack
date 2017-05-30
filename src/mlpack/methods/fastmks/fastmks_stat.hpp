@@ -3,11 +3,16 @@
  * @author Ryan Curtin
  *
  * The statistic used in trees with FastMKS.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_FASTMKS_FASTMKS_STAT_HPP
-#define __MLPACK_METHODS_FASTMKS_FASTMKS_STAT_HPP
+#ifndef MLPACK_METHODS_FASTMKS_FASTMKS_STAT_HPP
+#define MLPACK_METHODS_FASTMKS_FASTMKS_STAT_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/core/tree/tree_traits.hpp>
 
 namespace mlpack {
@@ -58,17 +63,17 @@ class FastMKSStat
       else
       {
         selfKernel = sqrt(node.Metric().Kernel().Evaluate(
-            node.Dataset().unsafe_col(node.Point(0)),
-            node.Dataset().unsafe_col(node.Point(0))));
+            node.Dataset().col(node.Point(0)),
+            node.Dataset().col(node.Point(0))));
       }
     }
     else
     {
       // Calculate the centroid.
-      arma::vec centroid;
-      node.Centroid(centroid);
+      arma::vec center;
+      node.Center(center);
 
-      selfKernel = sqrt(node.Metric().Kernel().Evaluate(centroid, centroid));
+      selfKernel = sqrt(node.Metric().Kernel().Evaluate(center, center));
     }
   }
 
@@ -93,6 +98,21 @@ class FastMKSStat
   //! evaluation.
   void*& LastKernelNode() { return lastKernelNode; }
 
+  //! Serialize the statistic.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
+  {
+    ar & data::CreateNVP(bound, "bound");
+    ar & data::CreateNVP(selfKernel, "selfKernel");
+
+    // Void out last kernel information on load.
+    if (Archive::is_loading::value)
+    {
+      lastKernel = 0.0;
+      lastKernelNode = NULL;
+    }
+  }
+
  private:
   //! The bound for pruning.
   double bound;
@@ -108,7 +128,7 @@ class FastMKSStat
   void* lastKernelNode;
 };
 
-}; // namespace fastmks
-}; // namespace mlpack
+} // namespace fastmks
+} // namespace mlpack
 
 #endif

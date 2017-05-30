@@ -4,11 +4,16 @@
  *
  * Defines the NeighborSearch class, which performs an abstract
  * nearest-neighbor-like query on two datasets.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_NEIGHBOR_SEARCH_NEIGHBOR_SEARCH_STAT_HPP
-#define __MLPACK_METHODS_NEIGHBOR_SEARCH_NEIGHBOR_SEARCH_STAT_HPP
+#ifndef MLPACK_METHODS_NEIGHBOR_SEARCH_NEIGHBOR_SEARCH_STAT_HPP
+#define MLPACK_METHODS_NEIGHBOR_SEARCH_NEIGHBOR_SEARCH_STAT_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace neighbor {
@@ -29,11 +34,9 @@ class NeighborSearchStat
   //! using the best descendant candidate distance modified by the furthest
   //! descendant distance.
   double secondBound;
-  //! The better of the two bounds.
-  double bound;
-
-  //! The last distance evaluation node.
-  void* lastDistanceNode;
+  //! The aux bound on the node's neighbor distances (B_aux). This represents
+  //! the best descendant candidate distance (used to calculate secondBound).
+  double auxBound;
   //! The last distance evaluation.
   double lastDistance;
 
@@ -45,8 +48,7 @@ class NeighborSearchStat
   NeighborSearchStat() :
       firstBound(SortPolicy::WorstDistance()),
       secondBound(SortPolicy::WorstDistance()),
-      bound(SortPolicy::WorstDistance()),
-      lastDistanceNode(NULL),
+      auxBound(SortPolicy::WorstDistance()),
       lastDistance(0.0) { }
 
   /**
@@ -57,9 +59,19 @@ class NeighborSearchStat
   NeighborSearchStat(TreeType& /* node */) :
       firstBound(SortPolicy::WorstDistance()),
       secondBound(SortPolicy::WorstDistance()),
-      bound(SortPolicy::WorstDistance()),
-      lastDistanceNode(NULL),
+      auxBound(SortPolicy::WorstDistance()),
       lastDistance(0.0) { }
+
+  /**
+   * Reset statistic parameters to initial values.
+   */
+  void Reset()
+  {
+    firstBound = SortPolicy::WorstDistance();
+    secondBound = SortPolicy::WorstDistance();
+    auxBound = SortPolicy::WorstDistance();
+    lastDistance = 0.0;
+  }
 
   //! Get the first bound.
   double FirstBound() const { return firstBound; }
@@ -69,21 +81,29 @@ class NeighborSearchStat
   double SecondBound() const { return secondBound; }
   //! Modify the second bound.
   double& SecondBound() { return secondBound; }
-  //! Get the overall bound (the better of the two bounds).
-  double Bound() const { return bound; }
-  //! Modify the overall bound (it should be the better of the two bounds).
-  double& Bound() { return bound; }
-  //! Get the last distance evaluation node.
-  void* LastDistanceNode() const { return lastDistanceNode; }
-  //! Modify the last distance evaluation node.
-  void*& LastDistanceNode() { return lastDistanceNode; }
+  //! Get the aux bound.
+  double AuxBound() const { return auxBound; }
+  //! Modify the aux bound.
+  double& AuxBound() { return auxBound; }
   //! Get the last distance calculation.
   double LastDistance() const { return lastDistance; }
   //! Modify the last distance calculation.
   double& LastDistance() { return lastDistance; }
+
+  //! Serialize the statistic to/from an archive.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
+  {
+    using data::CreateNVP;
+
+    ar & CreateNVP(firstBound, "firstBound");
+    ar & CreateNVP(secondBound, "secondBound");
+    ar & CreateNVP(auxBound, "auxBound");
+    ar & CreateNVP(lastDistance, "lastDistance");
+  }
 };
 
-}; // namespace neighbor
-}; // namespace mlpack
+} // namespace neighbor
+} // namespace mlpack
 
 #endif

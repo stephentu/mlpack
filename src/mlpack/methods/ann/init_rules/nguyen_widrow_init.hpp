@@ -17,12 +17,18 @@
  *   year={1990}
  * }
  * @endcode
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHOS_ANN_INIT_RULES_NGUYEN_WIDROW_INIT_HPP
-#define __MLPACK_METHOS_ANN_INIT_RULES_NGUYEN_WIDROW_INIT_HPP
+#ifndef MLPACK_METHODS_ANN_INIT_RULES_NGUYEN_WIDROW_INIT_HPP
+#define MLPACK_METHODS_ANN_INIT_RULES_NGUYEN_WIDROW_INIT_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
+#include "init_rules_traits.hpp"
 #include "random_init.hpp"
 
 namespace mlpack {
@@ -32,21 +38,18 @@ namespace ann /** Artificial Neural Network. */ {
  * This class is used to initialize the weight matrix with the Nguyen-Widrow
  * method. The method is defined by
  *
- * @f[
- * \gamma \le w_i \le \gamma \\
+ * @f{eqnarray*}{
+ * \gamma &\le& w_i \le \gamma \\
  * \beta &=& 0.7H^{\frac{1}{I}} \\
  * n &=& \sqrt{\sum_{i=0}{I}w_{i}^{2}} \\
  * w_i &=& \frac{\beta w_i}{n}
- * @f]
+ * @f}
  *
  * Where H is the number of neurons in the outgoing layer, I represents the
  * number of neurons in the ingoing layer and gamma defines the random interval
  * that is used to initialize the weights with a random value in a specific
  * range.
- *
- * @tparam MatType Type of matrix (should be arma::mat or arma::spmat).
  */
-template<typename MatType = arma::mat>
 class NguyenWidrowInitialization
 {
  public:
@@ -66,28 +69,59 @@ class NguyenWidrowInitialization
    * Nguyen-Widrow method.
    *
    * @param W Weight matrix to initialize.
-   * @param n_rows Number of rows.
-   * @return n_cols Number of columns.
+   * @param rows Number of rows.
+   * @param cols Number of columns.
    */
-  void Initialize(MatType& W, const size_t n_rows, const size_t n_cols)
+  template<typename eT>
+  void Initialize(arma::Mat<eT>& W, const size_t rows, const size_t cols)
   {
-    RandomInitialization<MatType> randomInit(lowerBound, upperBound);
-    randomInit.Initialize(W, n_rows, n_cols);
+    RandomInitialization randomInit(lowerBound, upperBound);
+    randomInit.Initialize(W, rows, cols);
 
-    double beta = 0.7 * std::pow(n_cols, 1 / n_rows);
+    double beta = 0.7 * std::pow(cols, 1 / rows);
     W *= (beta / arma::norm(W));
+  }
+
+  /**
+   * Initialize the elements of the specified weight 3rd order tensor with the
+   * Nguyen-Widrow method.
+   *
+   * @param W Weight matrix to initialize.
+   * @param rows Number of rows.
+   * @param cols Number of columns.
+   * @param slices Number of slices.
+   */
+  template<typename eT>
+  void Initialize(arma::Cube<eT>& W,
+                  const size_t rows,
+                  const size_t cols,
+                  const size_t slices)
+  {
+    W = arma::Cube<eT>(rows, cols, slices);
+
+    for (size_t i = 0; i < slices; i++)
+      Initialize(W.slice(i), rows, cols);
   }
 
  private:
   //! The number used as lower bound.
-  const double lowerBound;
+  double lowerBound;
 
   //! The number used as upper bound.
-  const double upperBound;
+  double upperBound;
 }; // class NguyenWidrowInitialization
 
+//! Initialization traits of the Nguyen-Widrow initialization rule.
+template<>
+class InitTraits<NguyenWidrowInitialization>
+{
+ public:
+  //! The Nguyen-Widrow initialization rule is applied over the entire network.
+  static const bool UseLayer = false;
+};
 
-}; // namespace ann
-}; // namespace mlpack
+
+} // namespace ann
+} // namespace mlpack
 
 #endif

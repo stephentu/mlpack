@@ -3,19 +3,30 @@
  * @author Ryan Curtin
  *
  * A dual-tree traverser for the cover tree.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_TREE_COVER_TREE_DUAL_TREE_TRAVERSER_HPP
-#define __MLPACK_CORE_TREE_COVER_TREE_DUAL_TREE_TRAVERSER_HPP
+#ifndef MLPACK_CORE_TREE_COVER_TREE_DUAL_TREE_TRAVERSER_HPP
+#define MLPACK_CORE_TREE_COVER_TREE_DUAL_TREE_TRAVERSER_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <queue>
 
 namespace mlpack {
 namespace tree {
 
-template<typename MetricType, typename RootPointPolicy, typename StatisticType>
+template<
+    typename MetricType,
+    typename StatisticType,
+    typename MatType,
+    typename RootPointPolicy
+>
 template<typename RuleType>
-class CoverTree<MetricType, RootPointPolicy, StatisticType>::DualTreeTraverser
+class CoverTree<MetricType, StatisticType, MatType, RootPointPolicy>::
+    DualTreeTraverser
 {
  public:
   /**
@@ -53,7 +64,8 @@ class CoverTree<MetricType, RootPointPolicy, StatisticType>::DualTreeTraverser
   struct DualCoverTreeMapEntry
   {
     //! The node this entry refers to.
-    CoverTree<MetricType, RootPointPolicy, StatisticType>* referenceNode;
+    CoverTree<MetricType, StatisticType, MatType, RootPointPolicy>*
+        referenceNode;
     //! The score of the node.
     double score;
     //! The base case.
@@ -90,8 +102,8 @@ class CoverTree<MetricType, RootPointPolicy, StatisticType>::DualTreeTraverser
                               referenceMap);
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 // Include implementation.
 #include "dual_tree_traverser_impl.hpp"

@@ -3,17 +3,22 @@
  * @author Ryan Curtin
  *
  * This implements the cosine distance.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_KERNELS_COSINE_DISTANCE_IMPL_HPP
-#define __MLPACK_CORE_KERNELS_COSINE_DISTANCE_IMPL_HPP
+#ifndef MLPACK_CORE_KERNELS_COSINE_DISTANCE_IMPL_HPP
+#define MLPACK_CORE_KERNELS_COSINE_DISTANCE_IMPL_HPP
 
 #include "cosine_distance.hpp"
 
 namespace mlpack {
 namespace kernel {
 
-template<typename VecType>
-double CosineDistance::Evaluate(const VecType& a, const VecType& b)
+template<typename VecTypeA, typename VecTypeB>
+double CosineDistance::Evaluate(const VecTypeA& a, const VecTypeB& b)
 {
   // Since we are using the L2 inner product, this is easy.  But we have to make
   // sure we aren't dividing by zero (if we are, then the cosine similarity is
@@ -27,7 +32,7 @@ double CosineDistance::Evaluate(const VecType& a, const VecType& b)
     return dot(a, b) / denominator;
 }
 
-}; // namespace kernel
-}; // namespace mlpack
+} // namespace kernel
+} // namespace mlpack
 
 #endif

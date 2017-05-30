@@ -1,28 +1,35 @@
 /**
-  * @file single_tree_traverser.hpp
-  * @author Andrew Wells
-  *
-  * A nested class of Rectangle Tree for traversing rectangle type trees
-  * with a given set of rules which indicate the branches to prune and the
-  * order in which to recurse.  This is a depth-first traverser.
-  */
-#ifndef __MLPACK_CORE_TREE_RECTANGLE_TREE_SINGLE_TREE_TRAVERSER_HPP
-#define __MLPACK_CORE_TREE_RECTANGLE_TREE_SINGLE_TREE_TRAVERSER_HPP
+ * @file single_tree_traverser.hpp
+ * @author Andrew Wells
+ *
+ * A nested class of Rectangle Tree for traversing rectangle type trees
+ * with a given set of rules which indicate the branches to prune and the
+ * order in which to recurse.  This is a depth-first traverser.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
+ */
+#ifndef MLPACK_CORE_TREE_RECTANGLE_TREE_SINGLE_TREE_TRAVERSER_HPP
+#define MLPACK_CORE_TREE_RECTANGLE_TREE_SINGLE_TREE_TRAVERSER_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 #include "rectangle_tree.hpp"
 
 namespace mlpack {
 namespace tree {
 
-template<typename SplitType,
+template<typename MetricType,
+         typename StatisticType,
+         typename MatType,
+         typename SplitType,
          typename DescentType,
-	 typename StatisticType,
-         typename MatType>
+         template<typename> class AuxiliaryInformationType>
 template<typename RuleType>
-class RectangleTree<SplitType, DescentType, StatisticType, MatType>::
-    SingleTreeTraverser
+class RectangleTree<MetricType, StatisticType, MatType, SplitType,
+                    DescentType, AuxiliaryInformationType>::SingleTreeTraverser
 {
  public:
   /**
@@ -45,12 +52,11 @@ class RectangleTree<SplitType, DescentType, StatisticType, MatType>::
   size_t& NumPrunes() { return numPrunes; }
 
  private:
-
   // We use this class and this function to make the sorting and scoring easy
   // and efficient:
-  class NodeAndScore {
-   public:
-    RectangleTree<SplitType, DescentType, StatisticType, MatType>* node;
+  struct NodeAndScore
+  {
+    RectangleTree* node;
     double score;
   };
 
@@ -66,8 +72,8 @@ class RectangleTree<SplitType, DescentType, StatisticType, MatType>::
   size_t numPrunes;
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 // Include implementation.
 #include "single_tree_traverser_impl.hpp"

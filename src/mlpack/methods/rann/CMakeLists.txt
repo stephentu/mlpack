@@ -15,6 +15,14 @@ set(SOURCES
 
   # typedefs
   ra_typedef.hpp
+
+  # utilities
+  ra_util.hpp
+  ra_util.cpp
+
+  # model
+  ra_model.hpp
+  ra_model_impl.hpp
 )
 
 # add directory name to sources
@@ -22,17 +30,25 @@ set(DIR_SRCS)
 foreach(file ${SOURCES})
   set(DIR_SRCS ${DIR_SRCS} ${CMAKE_CURRENT_SOURCE_DIR}/${file})
 endforeach()
-# append sources (with directory name) to list of all MLPACK sources (used at the parent scope)
-set(MLPACK_CONTRIB_SRCS ${MLPACK_CONTRIB_SRCS} ${DIR_SRCS} PARENT_SCOPE)
+# Append sources (with directory name) to list of all mlpack sources (used at the parent scope)
+set(MLPACK_SRCS ${MLPACK_SRCS} ${DIR_SRCS} PARENT_SCOPE)
 
+# The code to compute the rank-approximate neighbor for the given query and
+# reference sets.
+add_cli_executable(krann)
 
-# The code to compute the rank-approximate neighbor
-# for the given query and reference sets
-add_executable(allkrann
-  allkrann_main.cpp
-)
-target_link_libraries(allkrann
-  mlpack
-)
+if (BUILD_CLI_EXECUTABLES)
+  # Compatibility: retain mlpack_allkrann until mlpack 3.0.0.
+  get_property(krann_loc TARGET mlpack_krann PROPERTY LOCATION)
+  get_filename_component(krann_ext ${krann_loc} EXT)
 
-install(TARGETS allkrann RUNTIME DESTINATION bin)
+  add_custom_command(TARGET mlpack_krann POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy
+      $<TARGET_FILE:mlpack_krann>
+      $<TARGET_FILE_DIR:mlpack_krann>/mlpack_allkrann${krann_ext}
+  )
+
+  install(PROGRAMS $<TARGET_FILE_DIR:mlpack_kfn>/mlpack_allkrann${krann_ext}
+      DESTINATION bin)
+endif ()
+

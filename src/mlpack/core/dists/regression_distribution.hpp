@@ -3,11 +3,16 @@
  * @author Michael Fox
  *
  * Implementation of conditional Gaussian distribution for HMM regression (HMMR)
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_DISTRIBUTIONS_REGRESSION_DISTRIBUTION_HPP
-#define __MLPACK_CORE_DISTRIBUTIONS_REGRESSION_DISTRIBUTION_HPP
+#ifndef MLPACK_CORE_DISTRIBUTIONS_REGRESSION_DISTRIBUTION_HPP
+#define MLPACK_CORE_DISTRIBUTIONS_REGRESSION_DISTRIBUTION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/core/dists/gaussian_distribution.hpp>
 #include <mlpack/methods/linear_regression/linear_regression.hpp>
 
@@ -27,7 +32,7 @@ class RegressionDistribution
  private:
   //! Regression function for representing conditional mean.
   regression::LinearRegression rf;
-  //! Error distribution
+  //! Error distribution.
   GaussianDistribution err;
 
  public:
@@ -43,10 +48,22 @@ class RegressionDistribution
    * @param predictors Matrix of predictors (X).
    * @param responses Vector of responses (y).
    */
+  mlpack_deprecated RegressionDistribution(const arma::mat& predictors,
+                                           const arma::vec& responses) :
+    RegressionDistribution(predictors, arma::rowvec(responses.t()))
+  {}
+
+  /**
+   * Create a Conditional Gaussian distribution with conditional mean function
+   * obtained by running RegressionFunction on predictors, responses.
+   *
+   * @param predictors Matrix of predictors (X).
+   * @param responses Vector of responses (y).
+   */
   RegressionDistribution(const arma::mat& predictors,
-                         const arma::vec& responses) :
-      rf(regression::LinearRegression(predictors, responses))
+                         const arma::rowvec& responses)
   {
+    rf.Train(predictors, responses);
     err = GaussianDistribution(1);
     arma::mat cov(1, 1);
     cov(0, 0) = rf.ComputeError(predictors, responses);
@@ -54,26 +71,46 @@ class RegressionDistribution
   }
 
   /**
-   * Returns a string representation of this object.
+   * Serialize the distribution.
    */
-  std::string ToString() const;
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
+  {
+    ar & data::CreateNVP(rf, "rf");
+    ar & data::CreateNVP(err, "err");
+  }
 
-  // Return regression function
-  const regression::LinearRegression& Rf() { return rf; }
+  //! Return regression function.
+  const regression::LinearRegression& Rf() const { return rf; }
+  //! Modify regression function.
+  regression::LinearRegression& Rf() { return rf; }
+
+  //! Return error distribution.
+  const GaussianDistribution& Err() const { return err; }
+  //! Modify error distribution.
+  GaussianDistribution& Err() { return err; }
 
   /**
    * Estimate the Gaussian distribution directly from the given observations.
    *
    * @param observations List of observations.
    */
-  void Estimate(const arma::mat& observations);
+  void Train(const arma::mat& observations);
 
   /**
    * Estimate parameters using provided observation weights
    *
    * @param weights probability that given observation is from distribution
    */
-  void Estimate(const arma::mat& observations, const arma::vec& weights);
+  mlpack_deprecated void Train(const arma::mat& observations,
+                               const arma::vec& weights);
+
+  /**
+   * Estimate parameters using provided observation weights
+   *
+   * @param weights probability that given observation is from distribution
+   */
+  void Train(const arma::mat& observations, const arma::rowvec& weights);
 
   /**
   * Evaluate probability density function of given observation
@@ -97,7 +134,16 @@ class RegressionDistribution
    * @param points the data points to calculate with.
    * @param predictions y, will contain calculated values on completion.
    */
-  void Predict(const arma::mat& points, arma::vec& predictions) const;
+  mlpack_deprecated void Predict(const arma::mat& points,
+                                 arma::vec& predictions) const;
+
+  /**
+   * Calculate y_i for each data point in points.
+   *
+   * @param points the data points to calculate with.
+   * @param predictions y, will contain calculated values on completion.
+   */
+  void Predict(const arma::mat& points, arma::rowvec& predictions) const;
 
   //! Return the parameters (the b vector).
   const arma::vec& Parameters() const { return rf.Parameters(); }
@@ -107,7 +153,7 @@ class RegressionDistribution
 };
 
 
-}; // namespace distribution
-}; // namespace mlpack
+} // namespace distribution
+} // namespace mlpack
 
 #endif

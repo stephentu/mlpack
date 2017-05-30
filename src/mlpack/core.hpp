@@ -1,27 +1,33 @@
-/***
+﻿/**
  * @file core.hpp
  *
  * Include all of the base components required to write MLPACK methods, and the
  * main MLPACK Doxygen documentation.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_HPP
-#define __MLPACK_CORE_HPP
+#ifndef MLPACK_CORE_HPP
+#define MLPACK_CORE_HPP
 
 /**
- * @mainpage MLPACK Documentation
+ * @mainpage mlpack Documentation
  *
  * @section intro_sec Introduction
  *
- * MLPACK is an intuitive, fast, scalable C++ machine learning library, meant to
+ * mlpack is an intuitive, fast, scalable C++ machine learning library, meant to
  * be a machine learning analog to LAPACK.  It aims to implement a wide array of
  * machine learning methods and function as a "swiss army knife" for machine
- * learning researchers.  The MLPACK development website can be found at
+ * learning researchers.  The mlpack development website can be found at
  * http://mlpack.org.
  *
- * MLPACK uses the Armadillo C++ matrix library (http://arma.sourceforge.net)
- * for general matrix, vector, and linear algebra support.  MLPACK also uses the
+ * mlpack uses the Armadillo C++ matrix library (http://arma.sourceforge.net)
+ * for general matrix, vector, and linear algebra support.  mlpack also uses the
  * program_options, math_c99, and unit_test_framework components of the Boost
- * library; in addition, LibXml2 is used.
+ * library, and optionally uses libbfd and libdl to give backtraces when
+ * compiled with debugging symbols on some platforms.
  *
  * @section howto How To Use This Documentation
  *
@@ -29,12 +35,12 @@
  * necessarily a tutorial, but it does provide detailed documentation on every
  * namespace, method, and class.
  *
- * Each MLPACK namespace generally refers to one machine learning method, so
+ * Each mlpack namespace generally refers to one machine learning method, so
  * browsing the list of namespaces provides some insight as to the breadth of
  * the methods contained in the library.
  *
- * To generate this documentation in your own local copy of MLPACK, you can
- * simply use Doxygen, from the root directory (@c /mlpack/trunk/ ):
+ * To generate this documentation in your own local copy of mlpack, you can
+ * simply use Doxygen, from the root directory of the project:
  *
  * @code
  * $ doxygen
@@ -42,20 +48,52 @@
  *
  * @section executables Executables
  *
- * MLPACK provides several executables so that MLPACK methods can be used
+ * mlpack provides several executables so that mlpack methods can be used
  * without any need for knowledge of C++.  These executables are all
  * self-documented, and that documentation can be accessed by running the
  * executables with the '-h' or '--help' flag.
  *
  * A full list of executables is given below:
  *
- * allkfn, allknn, emst, gmm, hmm_train, hmm_loglik, hmm_viterbi, hmm_generate,
- * kernel_pca, kmeans, lars, linear_regression, local_coordinate_coding, mvu,
- * nbc, nca, pca, radical, sparse_coding
+ * - mlpack_adaboost
+ * - mlpack_approx_kfn
+ * - mlpack_cf
+ * - mlpack_decision_stump
+ * - mlpack_decision_tree
+ * - mlpack_det
+ * - mlpack_emst
+ * - mlpack_fastmks
+ * - mlpack_gmm_train
+ * - mlpack_gmm_generate
+ * - mlpack_gmm_probability
+ * - mlpack_hmm_train
+ * - mlpack_hmm_loglik
+ * - mlpack_hmm_viterbi
+ * - mlpack_hmm_generate
+ * - mlpack_hoeffding_tree
+ * - mlpack_kernel_pca
+ * - mlpack_kfn
+ * - mlpack_kmeans
+ * - mlpack_knn
+ * - mlpack_krann
+ * - mlpack_lars
+ * - mlpack_linear_regression
+ * - mlpack_local_coordinate_coding
+ * - mlpack_logistic_regression
+ * - mlpack_lsh
+ * - mlpack_mean_shift
+ * - mlpack_nbc
+ * - mlpack_nca
+ * - mlpack_pca
+ * - mlpack_perceptron
+ * - mlpack_radical
+ * - mlpack_range_search
+ * - mlpack_softmax_regression
+ * - mlpack_sparse_coding
  *
  * @section tutorial Tutorials
  *
- * A few short tutorials on how to use MLPACK are given below.
+ * A few short tutorials on how to use mlpack are given below.
  *
  *  - @ref build
  *  - @ref matrices
@@ -75,9 +113,9 @@
  *  - @ref fmkstutorial
  *  - @ref amftutorial
  *
- * @section methods Methods in MLPACK
+ * @section methods Methods in mlpack
  *
- * The following methods are included in MLPACK:
+ * The following methods are included in mlpack:
  *
  *  - Density Estimation Trees - mlpack::det::DTree
  *  - Euclidean Minimum Spanning Trees - mlpack::emst::DualTreeBoruvka
@@ -95,13 +133,12 @@
  *  - Simple Least-Squares Linear Regression -
  *        mlpack::regression::LinearRegression
  *  - Sparse Coding - mlpack::sparse_coding::SparseCoding
- *  - Tree-based neighbor search (AllkNN, AllkFN) -
- *        mlpack::neighbor::NeighborSearch
+ *  - Tree-based neighbor search (KNN, KFN) - mlpack::neighbor::NeighborSearch
  *  - Tree-based range search - mlpack::range::RangeSearch
  *
  * @section remarks Final Remarks
  *
- * MLPACK contributors include:
+ * mlpack contributors include:
  *
  *   - Ryan Curtin <gth671b@mail.gatech.edu>
  *   - James Cline <james.cline@gatech.edu>
@@ -141,9 +178,49 @@
  *   - Udit Saxena <saxena.udit@gmail.com>
  *   - Stephen Tu <tu.stephenl@gmail.com>
  *   - Jaskaran Singh <jaskaranvirdi@gmail.com>
+ *   - Shangtong Zhang <zhangshangtong.cpp@icloud.com>
  *   - Hritik Jain <hritik.jain.cse13@itbhu.ac.in>
  *   - Vladimir Glazachev <glazachev.vladimir@gmail.com>
  *   - QiaoAn Chen <kazenoyumechen@gmail.com>
+ *   - Janzen Brewer <jahabrewer@gmail.com>
+ *   - Trung Dinh <dinhanhtrung@gmail.com>
+ *   - Tham Ngap Wei <thamngapwei@gmail.com>
+ *   - Grzegorz Krajewski <krajekg@gmail.com>
+ *   - Joseph Mariadassou <joe.mariadassou@gmail.com>
+ *   - Pavel Zhigulin <pashaworking@gmail.com>
+ *   - Andy Fang <AndyFang.DZ@gmail.com>
+ *   - Barak Pearlmutter <barak+git@pearlmutter.net>
+ *   - Ivari Horm <ivari@risk.ee>
+ *   - Dhawal Arora <d.p.arora1@gmail.com>
+ *   - Alexander Leinoff <alexander-leinoff@uiowa.edu>
+ *   - Palash Ahuja <abhor902@gmail.com>
+ *   - Yannis Mentekidis <mentekid@gmail.com>
+ *   - Ranjan Mondal <ranjan.rev@gmail.com>
+ *   - Mikhail Lozhnikov <lozhnikovma@gmail.com>
+ *   - Marcos Pividori <marcos.pividori@gmail.com>
+ *   - Keon Kim <kwk236@gmail.com>
+ *   - Nilay Jain <nilayjain13@gmail.com>
+ *   - Peter Lehner <peter.lehner@dlr.de>
+ *   - Anuraj Kanodia <akanuraj200@gmail.com>
+ *   - Ivan Georgiev <ivan@jonan.info>
+ *   - Shikhar Bhardwaj <shikharbhardwaj68@gmail.com>
+ *   - Yashu Seth <yashuseth2503@gmail.com>
+ *   - Mike Izbicki <mike@izbicki.me>
+ *   - Sudhanshu Ranjan <sranjan.sud@gmail.com>
+ *   - Piyush Jaiswal <piyush.jaiswal@st.niituniversity.in>
+ *   - Dinesh Raj <dinu.iota@gmail.com>
+ *   - Prasanna Patil <prasannapatil08@gmail.com>
+ *   - Lakshya Agrawal <zeeshan.lakshya@gmail.com>
+ *   - Vivek Pal <vivekpal.dtu@gmail.com>
+ *   - Praveen Ch <chvsp972911@gmail.com>
+ *   - Kirill Mishchenko <ki.mishchenko@gmail.com>
+ *   - Abhinav Moudgil <abhinavmoudgil95@gmail.com>
+ *   - Thyrix Yang <thyrixyang@gmail.com>
+ *   - Sagar B Hathwar <sagarbhathwar@gmail.com>
+ *   - Nishanth Hegde <hegde.nishanth@gmail.com>
+ *   - Parminder Singh <parmsingh101@gmail.com>
+ *   - CodeAi (deep learning bug detector) <benjamin.bales@assrc.us>
+ *   - Franciszek Stokowacki <franek.stokowacki@gmail.com>
  */
 
 // First, include all of the prerequisites.
@@ -153,19 +230,24 @@
 #include <mlpack/core/util/arma_traits.hpp>
 #include <mlpack/core/util/log.hpp>
 #include <mlpack/core/util/cli.hpp>
-#include <mlpack/core/util/ostream_extra.hpp>
+#include <mlpack/core/util/deprecated.hpp>
 #include <mlpack/core/data/load.hpp>
 #include <mlpack/core/data/save.hpp>
 #include <mlpack/core/data/normalize_labels.hpp>
 #include <mlpack/core/math/clamp.hpp>
 #include <mlpack/core/math/random.hpp>
+#include <mlpack/core/math/random_basis.hpp>
 #include <mlpack/core/math/lin_alg.hpp>
 #include <mlpack/core/math/range.hpp>
 #include <mlpack/core/math/round.hpp>
-#include <mlpack/core/util/save_restore_utility.hpp>
 #include <mlpack/core/dists/discrete_distribution.hpp>
 #include <mlpack/core/dists/gaussian_distribution.hpp>
 #include <mlpack/core/dists/laplace_distribution.hpp>
+#include <mlpack/core/dists/gamma_distribution.hpp>
+//mlpack::backtrace only for linux
+#ifdef HAS_BFD_DL
+  #include <mlpack/core/util/backtrace.hpp>
+#endif
 
 // Include kernel traits.
 #include <mlpack/core/kernels/kernel_traits.hpp>
@@ -179,6 +261,11 @@
 #include <mlpack/core/kernels/pspectrum_string_kernel.hpp>
 #include <mlpack/core/kernels/spherical_kernel.hpp>
 #include <mlpack/core/kernels/triangular_kernel.hpp>
+
+// Use OpenMP if compiled with -DHAS_OPENMP.
+#ifdef HAS_OPENMP
+  #include <omp.h>
+#endif
 
 // Use Armadillo's C++ version detection.
 #ifdef ARMA_USE_CXX11

@@ -4,8 +4,14 @@
  * @author Michael Fox
  *
  * Implementation of Gaussian distribution class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #include "gaussian_distribution.hpp"
+#include <mlpack/methods/gmm/positive_definite_constraint.hpp>
 
 using namespace mlpack;
 using namespace mlpack::distribution;
@@ -82,7 +88,7 @@ arma::vec GaussianDistribution::Random() const
  *
  * @param observations List of observations.
  */
-void GaussianDistribution::Estimate(const arma::mat& observations)
+void GaussianDistribution::Train(const arma::mat& observations)
 {
   if (observations.n_cols > 0)
   {
@@ -116,18 +122,7 @@ void GaussianDistribution::Estimate(const arma::mat& observations)
   covariance /= (observations.n_cols - 1);
 
   // Ensure that the covariance is positive definite.
-  if (det(covariance) <= 1e-50)
-  {
-    Log::Debug << "GaussianDistribution::Estimate(): Covariance matrix is not "
-        << "positive definite. Adding perturbation." << std::endl;
-
-    double perturbation = 1e-30;
-    while (det(covariance) <= 1e-50)
-    {
-      covariance.diag() += perturbation;
-      perturbation *= 10; // Slow, but we don't want to add too much.
-    }
-  }
+  gmm::PositiveDefiniteConstraint::ApplyConstraint(covariance);
 
   FactorCovariance();
 }
@@ -137,8 +132,8 @@ void GaussianDistribution::Estimate(const arma::mat& observations)
  * account the probability of each observation actually being from this
  * distribution.
  */
-void GaussianDistribution::Estimate(const arma::mat& observations,
-                                    const arma::vec& probabilities)
+void GaussianDistribution::Train(const arma::mat& observations,
+                                 const arma::vec& probabilities)
 {
   if (observations.n_cols > 0)
   {
@@ -173,7 +168,8 @@ void GaussianDistribution::Estimate(const arma::mat& observations,
   }
 
   // Normalize.
-  mean /= sumProb;
+  if (sumProb > 0)
+    mean /= sumProb;
 
   // Now find the covariance.
   for (size_t i = 0; i < observations.n_cols; i++)
@@ -183,59 +179,11 @@ void GaussianDistribution::Estimate(const arma::mat& observations,
   }
 
   // This is probably biased, but I don't know how to unbias it.
-  covariance /= sumProb;
+  if (sumProb > 0)
+    covariance /= sumProb;
 
   // Ensure that the covariance is positive definite.
-  if (det(covariance) <= 1e-50)
-  {
-    Log::Debug << "GaussianDistribution::Estimate(): Covariance matrix is not "
-        << "positive definite. Adding perturbation." << std::endl;
+  gmm::PositiveDefiniteConstraint::ApplyConstraint(covariance);
 
-    double perturbation = 1e-30;
-    while (det(covariance) <= 1e-50)
-    {
-      covariance.diag() += perturbation;
-      perturbation *= 10; // Slow, but we don't want to add too much.
-    }
-  }
-
-  FactorCovariance();
-}
-
-/**
- * Returns a string representation of this object.
- */
-std::string GaussianDistribution::ToString() const
-{
-  std::ostringstream convert;
-  convert << "GaussianDistribution [" << this << "]" << std::endl;
-
-  // Secondary ostringstream so things can be indented right.
-  std::ostringstream data;
-  data << "Mean: " << std::endl << mean;
-  data << "Covariance: " << std::endl << covariance;
-
-  convert << util::Indent(data.str());
-  return convert.str();
-}
-
-
-/*&
- * Save to SaveRestoreUtility.
- */
-void GaussianDistribution::Save(util::SaveRestoreUtility& sr) const
-{
-  sr.SaveParameter(Type(), "type");
-  sr.SaveParameter(mean, "mean");
-  sr.SaveParameter(covariance, "covariance");
-}
-
-/**
- * Load from SaveRestoreUtility.
- */
-void GaussianDistribution::Load(const util::SaveRestoreUtility& sr)
-{
-  sr.LoadParameter(mean, "mean");
-  sr.LoadParameter(covariance, "covariance");
   FactorCovariance();
 }

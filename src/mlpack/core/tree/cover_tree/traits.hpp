@@ -4,9 +4,14 @@
  *
  * This file contains the specialization of the TreeTraits class for the
  * CoverTree type of tree.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_TREE_COVER_TREE_TRAITS_HPP
-#define __MLPACK_CORE_TREE_COVER_TREE_TRAITS_HPP
+#ifndef MLPACK_CORE_TREE_COVER_TREE_TRAITS_HPP
+#define MLPACK_CORE_TREE_COVER_TREE_TRAITS_HPP
 
 #include <mlpack/core/tree/tree_traits.hpp>
 
@@ -20,9 +25,10 @@ namespace tree {
  * mlpack/core/tree/tree_traits.hpp for more information.
  */
 template<typename MetricType,
-         typename RootPointPolicy,
-         typename StatisticType>
-class TreeTraits<CoverTree<MetricType, RootPointPolicy, StatisticType> >
+         typename StatisticType,
+         typename MatType,
+         typename RootPointPolicy>
+class TreeTraits<CoverTree<MetricType, StatisticType, MatType, RootPointPolicy>>
 {
  public:
   /**
@@ -30,6 +36,12 @@ class TreeTraits<CoverTree<MetricType, RootPointPolicy, StatisticType> >
    * children represent non-overlapping subsets of the parent node.
    */
   static const bool HasOverlappingChildren = true;
+
+  /**
+   * Cover trees do have self-children, so points can be included in more than
+   * one node.
+   */
+  static const bool HasDuplicatedPoints = true;
 
   /**
    * Each cover tree node contains only one point, and that point is its
@@ -46,9 +58,19 @@ class TreeTraits<CoverTree<MetricType, RootPointPolicy, StatisticType> >
    * Points are not rearranged when the tree is built.
    */
   static const bool RearrangesDataset = false;
+
+  /**
+   * The cover tree is not necessarily a binary tree.
+   */
+  static const bool BinaryTree = false;
+
+  /**
+   * NumDescendants() represents the number of unique descendant points.
+   */
+  static const bool UniqueNumDescendants = true;
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 #endif

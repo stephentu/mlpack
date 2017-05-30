@@ -7,15 +7,21 @@
  * one-dimensional data matrix (data vector) to FastMKS which stores indices of
  * strings; then, the actual strings are given to the PSpectrumStringKernel at
  * construction time, and the kernel knows to map the indices to actual strings.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_KERNELS_PSPECTRUM_STRING_KERNEL_HPP
-#define __MLPACK_CORE_KERNELS_PSPECTRUM_STRING_KERNEL_HPP
+#ifndef MLPACK_CORE_KERNELS_PSPECTRUM_STRING_KERNEL_HPP
+#define MLPACK_CORE_KERNELS_PSPECTRUM_STRING_KERNEL_HPP
 
 #include <map>
 #include <string>
 #include <vector>
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
+#include <mlpack/core/util/log.hpp>
 
 namespace mlpack {
 namespace kernel {
@@ -28,7 +34,7 @@ namespace kernel {
  *
  * The string kernel, when created, must be passed a reference to a series of
  * string datasets (std::vector<std::vector<std::string> >&).  This is because
- * MLPACK only supports datasets which are Armadillo matrices -- and a dataset
+ * mlpack only supports datasets which are Armadillo matrices -- and a dataset
  * of variable-length strings cannot be easily cast into an Armadillo matrix.
  *
  * Therefore, once the PSpectrumStringKernel is created with a reference to the
@@ -95,20 +101,6 @@ class PSpectrumStringKernel
   //! Modify the value of p.
   size_t& P() { return p; }
 
-   /*
-   * Returns a string representation of this object.
-   */
-  std::string ToString() const{
-    std::ostringstream convert;
-    convert << "PSpectrumStringKernel [" << this << "]" << std::endl;
-    convert << "  p used: " << p << std::endl;
-    convert << "  Dataset:" << datasets.size() << std::endl;
-    std::ostringstream convertb;
-    for (size_t ind=0; ind < datasets.size(); ind++)
-      convertb << datasets[ind].size();
-    convert << mlpack::util::Indent(convertb.str(),2);
-    return convert.str();
-  }
  private:
   //! The datasets.
   const std::vector<std::vector<std::string> >& datasets;
@@ -121,8 +113,8 @@ class PSpectrumStringKernel
   size_t p;
 };
 
-}; // namespace kernel
-}; // namespace mlpack
+} // namespace kernel
+} // namespace mlpack
 
 // Include implementation of templated Evaluate().
 #include "pspectrum_string_kernel_impl.hpp"

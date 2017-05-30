@@ -3,842 +3,319 @@
  * @author Marcus Edel
  *
  * Definition of the RNN class, which implements recurrent neural networks.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_ANN_RNN_HPP
-#define __MLPACK_METHODS_ANN_RNN_HPP
+#ifndef MLPACK_METHODS_ANN_RNN_HPP
+#define MLPACK_METHODS_ANN_RNN_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
-#include <boost/ptr_container/ptr_vector.hpp>
+#include "visitor/delete_visitor.hpp"
+#include "visitor/delta_visitor.hpp"
+#include "visitor/output_parameter_visitor.hpp"
+#include "visitor/reset_visitor.hpp"
 
-#include <mlpack/methods/ann/network_traits.hpp>
-#include <mlpack/methods/ann/performance_functions/cee_function.hpp>
-#include <mlpack/methods/ann/layer/layer_traits.hpp>
-#include <mlpack/methods/ann/connections/connection_traits.hpp>
+#include "init_rules/network_init.hpp"
+
+#include <mlpack/methods/ann/layer/layer_types.hpp>
+#include <mlpack/methods/ann/init_rules/random_init.hpp>
+#include <mlpack/core/optimizers/sgd/sgd.hpp>
 
 namespace mlpack {
 namespace ann /** Artificial Neural Network. */ {
 
 /**
- * An implementation of a recurrent neural network.
+ * Implementation of a standard recurrent neural network container.
  *
- * @tparam ConnectionTypes Tuple that contains all connection module which will
- * be used to construct the network.
- * @tparam OutputLayerType The outputlayer type used to evaluate the network.
- * @tparam PerformanceFunction Performance strategy used to claculate the error.
- * @tparam MaType of data (arma::mat or arma::sp_mat).
- * @tparam VecTypeDelta Type of the delta (arma::colvec, arma::mat or
- * arma::sp_mat).
+ * @tparam OutputLayerType The output layer type used to evaluate the network.
+ * @tparam InitializationRuleType Rule used to initialize the weight matrix.
  */
-template <
-  typename ConnectionTypes,
-  typename OutputLayerType,
-  class PerformanceFunction = CrossEntropyErrorFunction<>,
-  typename MatType = arma::mat,
-  typename VecTypeDelta = arma::colvec
+template<
+  typename OutputLayerType = NegativeLogLikelihood<>,
+  typename InitializationRuleType = RandomInitialization
 >
 class RNN
 {
-  public:
-    /**
-     * Construct the RNN object, which will construct a frecurrent neural
-     * network with the specified layers.
-     *
-     * @param network The network modules used to construct net network.
-     * @param outputLayer The outputlayer used to evaluate the network.
-     */
-    RNN(const ConnectionTypes& network, OutputLayerType& outputLayer) :
-        network(network), err(0),  trainError(0), seqNum(0),
-        outputLayer(outputLayer)
-    {
-      // Nothing to do here.
-    }
-
-    /**
-     * Run a single iteration of the feed forward algorithm, using the given
-     * input and target vector, updating the resulting error into the error
-     * vector.
-     *
-     * @param input Input data used for evaluating the network.
-     * @param target Target data used to calculate the network error.
-     * @param error The calulated error of the output layer.
-     * @tparam VecType Type of target data (arma::colvec, arma::mat or
-     * arma::sp_mat).
-     */
-    template <typename VecType>
-    void FeedForward(const MatType& input,
-                     const VecType& target,
-                     MatType& error)
-    {
-      // Initialize the activation storage only once.
-      if (!activations.size())
-      {
-        InitLayer(network, input);
-      }
-      else
-      {
-        // Expand the activation storage to handle sequences of
-        // different length.
-        if (activations[0].n_cols < input.n_elem)
-        {
-          for (size_t i = 0; i < activations.size(); i++)
-          {
-            activations[i].insert_cols(activations[i].n_cols,
-                arma::zeros<MatType>(activations[i].n_rows,
-                input.n_elem - activations[i].n_cols));
-          }
-        }
-      }
-
-      seqLen = input.n_rows / inputSize;
-      seqOutput = outputSize < target.n_elem ? true : false;
-      error = MatType(outputSize, outputSize < target.n_elem ? seqLen : 1);
-
-      // Iterate through the input sequence and perform the feed forward pass.
-      for (seqNum = 0; seqNum < seqLen; seqNum++)
-      {
-        // Reset the network by zeroing the layer activations.
-        ResetActivations(network);
-
-        // Set the current input activation.
-        std::get<0>(std::get<0>(
-            network)).InputLayer().InputActivation() = input.submat(
-            seqNum * inputSize, 0, (seqNum + 1) * inputSize - 1, 0);
-
-        // Perform the forward pass and calculate the output error.
-        ConnectionForward(network);
-        if (seqOutput)
-        {
-          arma::colvec seqError = error.unsafe_col(seqNum);
-          arma::colvec seqTarget = target.subvec(seqNum * outputSize,
-              (seqNum + 1) * outputSize - 1);
-
-          OutputError(network, seqTarget, seqError);
-        }
-
-        // Save the network activation for the backward/forward pass and update
-        // the recurrent connections.
-        if (seqNum < (input.n_rows / inputSize - 1))
-        {
-          layerNum = 0;
-          SaveActivations(network);
-        }
-      }
-
-      // Calculate the error only once for a non-sequence input.
-      if (!seqOutput)
-      {
-        seqNum = 0;
-        arma::colvec seqError = error.unsafe_col(seqNum);
-        OutputError(network, target, seqError);
-      }
-    }
-
-    /**
-     * Run a single iteration of the feed backward algorithm, using the given
-     * error of the output layer.
-     *
-     * @param error The calulated error of the output layer.
-     */
-    void FeedBackward(const MatType& error)
-    {
-      // Reset the network deltas by zeroing the storage.
-      for (size_t i = 0; i < delta.size(); i++)
-          delta[i].zeros();
-
-      // Iterate through the input sequence and perform the feed backward pass.
-      for (seqNum = seqLen - 1; seqNum >= 0; seqNum--)
-      {
-        gradientNum = 0;
-        deltaNum = 0;
-
-        // Perform the backward pass and update the gradient storage.
-        arma::colvec seqError = error.unsafe_col(seqOutput ? seqNum : 0);
-        ConnectionBackward(network, seqError);
-        UpdateGradients(network);
-
-        // Load the network activation for the upcoming backward pass.
-        if (seqNum > 0)
-        {
-          layerNum = 0;
-          LoadActivations(network);
-        }
-        else if (seqNum == 0) break;
-      }
-    }
-
-    /**
-     * Updating the weights using the specified optimizer.
-     *
-     */
-    void ApplyGradients()
-    {
-      gradientNum = 0;
-      ApplyGradients(network);
-
-      // Reset the overall error.
-      err = 0;
-      trainError = 0;
-      seqNum = 0;
-    }
-
-    /**
-     * Evaluate the network using the given input. The output activation is
-     * stored into the output parameter.
-     *
-     * @param input Input data used to evaluate the network.
-     * @param output Output data used to store the output activation
-     * @tparam VecType Type of data (arma::colvec, arma::mat or arma::sp_mat).
-     */
-    template <typename VecType>
-    void Predict(const VecType& input, VecType& output)
-    {
-      seqLen = input.n_rows / inputSize;
-
-      // Iterate through the input sequence and perform the feed forward pass.
-      for (seqNum = 0; seqNum < seqLen; seqNum++)
-      {
-        // Reset the network by zeroing the layer activations.
-        ResetActivations(network);
-
-        // Set the current input activation.
-        std::get<0>(std::get<0>(
-            network)).InputLayer().InputActivation() = input.submat(
-            seqNum * inputSize, 0, (seqNum + 1) * inputSize - 1, 0);
-
-        // Perform the forward pass and calculate the output error.
-        ConnectionForward(network);
-        if (seqOutput)
-        {
-          arma::colvec targetCol;
-          OutputPrediction(network, targetCol);
-          output = arma::join_cols(output, targetCol);
-        }
-
-        // Save the network activation for the backward/forward pass and update
-        // the recurrent connections.
-        if (seqNum < (input.n_rows / inputSize - 1))
-        {
-          layerNum = 0;
-          SaveActivations(network);
-        }
-      }
-
-      if (!seqOutput)
-        OutputPrediction(network, output);
-    }
-
-    /**
-     * Evaluate the trained network using the given input and compare the output
-     * with the given target vector.
-     *
-     * @param input Input data used to evaluate the trained network.
-     * @param target Target data used to calculate the network error.
-     * @param error The calulated error of the output layer.
-     * @tparam VecType Type of data (arma::colvec, arma::mat or arma::sp_mat).
-     */
-    template <typename VecType>
-    double Evaluate(const MatType& input,
-                     const VecType& target,
-                     MatType& error)
-    {
-      FeedForward(input, target, error);
-      return err;
-    }
-
-    //! Get the error of the network.
-    double Error() const { return trainError; }
-
-  private:
-    /**
-     * Helper function to reset the network by zeroing the layer activations.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connection
-     * modules. The general case peels off the first type and recurses, as usual
-     * with variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    ResetActivations(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    ResetActivations(std::tuple<Tp...>& t)
-    {
-      Reset(std::get<I>(t));
-      ResetActivations<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Reset the network by zeroing the layer activations.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connections.
-     * The general case peels off the first type and recurses, as usual with
-     * variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    Reset(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    Reset(std::tuple<Tp...>& t)
-    {
-      Parameter<I, typename std::remove_reference<
-          decltype(std::get<I>(t).InputLayer())>::type, Tp...>(t);
-
-      std::get<I>(t).OutputLayer().InputActivation().zeros(
-          std::get<I>(t).OutputLayer().InputSize());
-
-      // Reset the recurrent connection only at the beginning of a new sequence.
-      if (seqNum == 0 && (ConnectionTraits<typename std::remove_reference<
-          decltype(std::get<I>(t))>::type>::IsSelfConnection ||
-          ConnectionTraits<typename std::remove_reference<decltype(
-          std::get<I>(t))>::type>::IsFullselfConnection))
-      {
-        std::get<I>(t).InputLayer().InputActivation().zeros(
-          std::get<I>(t).InputLayer().InputSize());
-      }
-
-      Reset<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Update the sequence length for a specific layer.
-     *
-     * enable_if (SFINAE) is used to determine if classes passed contains the
-     * SeqLen function.
-     */
-    template<size_t I, typename LayerType, typename... Tp>
-    typename std::enable_if<
-        LayerTraits<LayerType>::IsLSTMLayer == false, void>::type
-    Parameter(std::tuple<Tp...>& /* unused */) { }
-
-    /**
-     * Update the sequence length for a specific layer.
-     *
-     * enable_if (SFINAE) is used to determine if classes passed contains the
-     * SeqLen function.
-     */
-    template<size_t I, typename LayerType, typename... Tp>
-    typename std::enable_if<
-        LayerTraits<LayerType>::IsLSTMLayer == true, void>::type
-    Parameter(std::tuple<Tp...>& t)
-    {
-      std::get<I>(t).InputLayer().SeqLen() = seqLen;
-    }
-
-    /**
-     * Run a single iteration of the feed forward algorithm, using the given
-     * input and target vector, updating the resulting error into the error
-     * vector.
-     *
-     * enable_if (SFINAE) is used to select between two template overloads of
-     * the get function - one for when I is equal the size of the tuple of
-     * connections, and one for the general case which peels off the first type
-     * and recurses, as usual with variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    ConnectionForward(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    ConnectionForward(std::tuple<Tp...>& t)
-    {
-      LayerForward(std::get<I>(t));
-
-      // Use the first connection to perform the feed forward algorithm.
-      std::get<0>(std::get<I>(t)).OutputLayer().FeedForward(
-          std::get<0>(std::get<I>(t)).OutputLayer().InputActivation(),
-          std::get<0>(std::get<I>(t)).OutputLayer().InputActivation());
-
-      ConnectionForward<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Sum up all layer activations by evaluating all connections.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connections.
-     * The general case peels off the first type and recurses, as usual with
-     * variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    LayerForward(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    LayerForward(std::tuple<Tp...>& t)
-    {
-      std::get<I>(t).FeedForward(std::get<I>(t).InputLayer().InputActivation());
-      LayerForward<I + 1, Tp...>(t);
-    }
-
-    /*
-     * Calculate the output error and update the overall error.
-     */
-    template<typename VecType, typename... Tp>
-    void OutputError(std::tuple<Tp...>& t,
-                     const VecType& target,
-                     VecType& error)
-    {
-       // Calculate and store the output error.
-      outputLayer.CalculateError(std::get<0>(
-          std::get<sizeof...(Tp) - 1>(t)).OutputLayer().InputActivation(),
-          target, error);
-
-      // Save the output activation for the upcoming feed backward pass.
-      activations.back().unsafe_col(seqNum) = std::get<0>(
-          std::get<sizeof...(Tp) - 1>(t)).OutputLayer().InputActivation();
-
-      // Masures the network's performance with the specified performance
-      // function.
-      err = PerformanceFunction::Error(std::get<0>(
-          std::get<sizeof...(Tp) - 1>(t)).OutputLayer().InputActivation(),
-          target);
-
-      // Update the overall training error.
-      trainError += err;
-    }
-
-    /*
-     * Calculate and store the output activation.
-     */
-    template<typename VecType, typename... Tp>
-    void OutputPrediction(std::tuple<Tp...>& t, VecType& output)
-    {
-       // Calculate and store the output prediction.
-      outputLayer.OutputClass(std::get<0>(
-          std::get<sizeof...(Tp) - 1>(t)).OutputLayer().InputActivation(),
-          output);
-    }
-
-    /**
-     * Run a single iteration of the feed backward algorithm, using the given
-     * error of the output layer. Note that we iterate backward through the
-     * connection modules.
-     *
-     * enable_if (SFINAE) is used to select between two template overloads of
-     * the get function - one for when I is equal the size of the tuple of
-     * connections, and one for the general case which peels off the first type
-     * and recurses, as usual with variadic function templates.
-     */
-    template<size_t I = 0, typename VecType, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp) + 1, void>::type
-    ConnectionBackward(std::tuple<Tp...>& /* unused */, VecType& /* unused */)
-    { }
-
-    template<size_t I = 1, typename VecType, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp) + 1, void>::type
-    ConnectionBackward(std::tuple<Tp...>& t, VecType& error)
-    {
-      // Distinguish between the output layer and the other layer. In case of
-      // the output layer use the specified error vector to store the error and
-      // to perform the feed backward pass.
-      if (I == 1)
-      {
-        // Use the first connection from the last connection module to
-        // calculate the error.
-        std::get<0>(std::get<sizeof...(Tp) - I>(t)).OutputLayer().FeedBackward(
-            activations.back().unsafe_col(seqNum), error,
-            std::get<0>(std::get<sizeof...(Tp) - I>(t)).OutputLayer().Delta());
-      }
-
-      LayerBackward(std::get<sizeof...(Tp) - I>(t), std::get<0>(std::get<
-          sizeof...(Tp) - I>(t)).OutputLayer().Delta(), I, sizeof...(Tp));
-
-      ConnectionBackward<I + 1, VecType, Tp...>(t, error);
-    }
-
-    /**
-     * Back propagate the given error and store the delta in the connection
-     * between the corresponding layer.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connections.
-     * The general case peels off the first type and recurses, as usual with
-     * variadic function templates.
-     */
-    template<size_t I = 0, typename VecType, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    LayerBackward(std::tuple<Tp...>& /* unused */,
-                  VecType& /* unused */,
-                  const size_t /* unused */,
-                  const size_t /* unused */) { }
-
-    template<size_t I = 0, typename VecType, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    LayerBackward(std::tuple<Tp...>& t,
-                  VecType& error,
-                  const size_t layer,
-                  const size_t layerNum)
-    {
-      std::get<I>(t).FeedBackward(error);
-
-      // Update the recurrent delta.
-      if (ConnectionTraits<typename std::remove_reference<decltype(
-          std::get<I>(t))>::type>::IsSelfConnection ||
-          ConnectionTraits<typename std::remove_reference<decltype(
-          std::get<I>(t))>::type>::IsFullselfConnection)
-      {
-        std::get<I>(t).FeedBackward(delta[deltaNum]);
-        delta[deltaNum++] = std::get<I>(t).Delta();
-      }
-
-      // We calculate the delta only for non bias layer and self connections.
-      if (!(ConnectionTraits<typename std::remove_reference<decltype(
-            std::get<I>(t))>::type>::IsSelfConnection ||
-        LayerTraits<typename std::remove_reference<decltype(
-            std::get<I>(t).InputLayer())>::type>::IsBiasLayer ||
-        ConnectionTraits<typename std::remove_reference<decltype(
-            std::get<I>(t))>::type>::IsFullselfConnection) && layer < layerNum)
-      {
-        // Sum up the stored delta for recurrent connections.
-        if (recurrentLayer[layer])
-        {
-          std::get<I>(t).Delta() += delta[deltaNum].subvec(
-              0, std::get<I>(t).InputLayer().OutputSize() - 1);
-        }
-
-        // Perform the backward pass.
-        std::get<I>(t).InputLayer().FeedBackward(
-            std::get<I>(t).InputLayer().InputActivation(),
-            std::get<I>(t).Delta(), std::get<I>(t).InputLayer().Delta());
-
-        // Update the delta storage for the next backward pass.
-        if (recurrentLayer[layer])
-          delta[deltaNum] = std::get<I>(t).InputLayer().Delta();
-      }
-
-      LayerBackward<I + 1, VecType, Tp...>(t, error, layer, layerNum);
-    }
-
-    /**
-     * Helper function to update the gradient storage.
-     *
-     * enable_if (SFINAE) is used to select between two template overloads of
-     * the get function - one for when I is equal the size of the tuple of
-     * connections, and one for the general case which peels off the first type
-     * and recurses, as usual with variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    UpdateGradients(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    UpdateGradients(std::tuple<Tp...>& t)
-    {
-      Gradients(std::get<I>(t));
-      UpdateGradients<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Sum up all gradients and store the results in the gradients storage.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connections.
-     * The general case peels off the first type and recurses, as usual with
-     * variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    Gradients(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    Gradients(std::tuple<Tp...>& t)
-    {
-      MatType gradient;
-      std::get<I>(t).Gradient(gradient);
-      gradients[gradientNum++] += gradient;
-
-      Gradients<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Helper function to update the weights using the specified optimizer and
-     * the given input.
-     *
-     * enable_if (SFINAE) is used to select between two template overloads of
-     * the get function - one for when I is equal the size of the tuple of
-     * connections, and one for the general case which peels off the first type
-     * and recurses, as usual with variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    ApplyGradients(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    ApplyGradients(std::tuple<Tp...>& t)
-    {
-      Apply(std::get<I>(t));
-      ApplyGradients<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Update the weights using the specified optimizer,the given input and the
-     * calculated delta.
-     *
-     * enable_if (SFINAE) is used to select between two template overloads of
-     * the get function - one for when I is equal the size of the tuple of
-     * connections, and one for the general case which peels off the first type
-     * and recurses, as usual with variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    Apply(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    Apply(std::tuple<Tp...>& t)
-    {
-      std::get<I>(t).Optimzer().UpdateWeights(std::get<I>(t).Weights(),
-          gradients[gradientNum], trainError);
-
-      // // Reset the gradient storage.
-      gradients[gradientNum++].zeros();
-
-      Apply<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Helper function to iterate through all connection modules and to build
-     * the activation, gradients and delta storage.
-     *
-     * enable_if (SFINAE) is used to select between two template overloads of
-     * the get function - one for when I is equal the size of the tuple of
-     * connections, and one for the general case which peels off the first type
-     * and recurses, as usual with variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    InitLayer(std::tuple<Tp...>& t, const MatType& input)
-    {
-      recurrentLayer.push_back(false);
-      outputSize = std::get<0>(std::get<I - 1>(t)).OutputLayer().OutputSize();
-      activations.push_back(new MatType(outputSize, input.n_elem));
-    }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    InitLayer(std::tuple<Tp...>& t, const MatType& input)
-    {
-      if (I == 0)
-        inputSize = std::get<0>(std::get<I>(t)).InputLayer().InputSize();
-
-      recurrentLayer.push_back(false);
-      Recurrent(std::get<sizeof...(Tp) - I - 1>(t));
-
-      Layer(std::get<I>(t), input, I);
-      InitLayer<I + 1, Tp...>(t, input);
-    }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    Recurrent(std::tuple<Tp...>& /* unusded */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    Recurrent(std::tuple<Tp...>& t)
-    {
-      if (ConnectionTraits<typename std::remove_reference<decltype(
-              std::get<I>(t))>::type>::IsSelfConnection ||
-          ConnectionTraits<typename std::remove_reference<decltype(
-            std::get<I>(t))>::type>::IsFullselfConnection)
-      {
-        recurrentLayer.back() = true;
-        delta.push_back(new VecTypeDelta(std::get<I>(t).Weights().n_rows));
-      }
-      else
-      {
-        Recurrent<I + 1, Tp...>(t);
-      }
-    }
-
-    /**
-     * Iterate through all connections and build the the activation, gradients
-     * and delta storage.
-     *
-     * enable_if (SFINAE) is used to select between two template overloads of
-     * the get function - one for when I is equal the size of the tuple of
-     * connections, and one for the general case which peels off the first type
-     * and recurses, as usual with variadic function templates.
-     */
-    template<size_t I = 0, typename VecType, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    Layer(std::tuple<Tp...>& /* unusded */,
-          const VecType& /* unused */,
-          const size_t /* unsued */) { }
-
-    template<size_t I = 0, typename VecType, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    Layer(std::tuple<Tp...>& t, const VecType& input, const size_t layer)
-    {
-      activations.push_back(new MatType(
-        std::get<I>(t).InputLayer().OutputSize(), input.n_elem));
-
-      gradients.push_back(new MatType(std::get<I>(t).Weights().n_rows,
-          std::get<I>(t).Weights().n_cols, arma::fill::zeros));
-
-      Layer<I + 1, VecType, Tp...>(t, input, layer);
-    }
-
-    /**
-     * Helper function to iterate through all connection modules and to load
-     * the layer activations.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connection
-     * modules. The general case peels off the first type and recurses, as usual
-     * with variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    LoadActivations(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    LoadActivations(std::tuple<Tp...>& t)
-    {
-      Load(std::get<I>(t));
-      LoadActivations<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Load and set the network layer activations.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connections.
-     * The general case peels off the first type and recurses, as usual with
-     * variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    Load(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    Load(std::tuple<Tp...>& t)
-    {
-      std::get<I>(t).InputLayer().InputActivation() =
-          activations[layerNum++].unsafe_col(seqNum - 1);
-      Load<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Helper function to iterate through all connection modules and to save
-     * the layer activations.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connection
-     * modules. The general case peels off the first type and recurses, as usual
-     * with variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    SaveActivations(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    SaveActivations(std::tuple<Tp...>& t)
-    {
-      Save(std::get<I>(t));
-      SaveActivations<I + 1, Tp...>(t);
-    }
-
-    /**
-     * Save the network layer activations.
-     *
-     * enable_if (SFINAE) is used to iterate through the network connections.
-     * The general case peels off the first type and recurses, as usual with
-     * variadic function templates.
-     */
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I == sizeof...(Tp), void>::type
-    Save(std::tuple<Tp...>& /* unused */) { }
-
-    template<size_t I = 0, typename... Tp>
-    typename std::enable_if<I < sizeof...(Tp), void>::type
-    Save(std::tuple<Tp...>& t)
-    {
-      activations[layerNum++].unsafe_col(seqNum) =
-          std::get<I>(t).InputLayer().InputActivation();
-
-      // Use the activation from the corresponding outputlayer for
-      // self connections.
-      if (ConnectionTraits<typename std::remove_reference<decltype(
-              std::get<I>(t))>::type>::IsSelfConnection ||
-          ConnectionTraits<typename std::remove_reference<decltype(
-              std::get<I>(t))>::type>::IsFullselfConnection)
-      {
-        std::get<I>(t).InputLayer().InputActivation() =
-            std::get<I>(t).OutputLayer().InputActivation();
-      }
-
-      Save<I + 1, Tp...>(t);
-    }
-
-    //! The layer we are using to build the network.
-    ConnectionTypes network;
-
-    //! The current error of the network.
-    double err;
-
-    //! The current training error of the network.
-    double trainError;
-
-    //! The activation storage we are using to perform the feed backward pass.
-    boost::ptr_vector<MatType> activations;
-
-    //! The gradient storage we are using to perform the feed backward pass.
-    boost::ptr_vector<MatType> gradients;
-
-    //! The index of the current sequence number.
-    size_t seqNum;
-
-    //! The index of the currently activate layer.
-    size_t layerNum;
-
-    //! The index of the currently activate gradient.
-    size_t gradientNum;
-
-    //! The index of the currently activate delta.
-    size_t deltaNum;
-
-    //! Locally stored network output size.
-    size_t outputSize;
-
-    //! Locally stored network input size.
-    size_t inputSize;
-
-    //! Locally stored parameter that indicates if the input is a sequence.
-    bool seqOutput;
-
-    //! The outputlayer used to evaluate the network
-    OutputLayerType& outputLayer;
-
-    //! Locally stored number of samples in one input sequence.
-    size_t seqLen;
-
-    //! The recurrentLayer storage we are using to perform the backward pass.
-    std::vector<bool> recurrentLayer;
-
-    //! The detla storage we are using to perform the feed backward pass.
-    boost::ptr_vector<VecTypeDelta> delta;
+ public:
+  //! Convenience typedef for the internal model construction.
+  using NetworkType = RNN<OutputLayerType, InitializationRuleType>;
+
+  /**
+   * Create the RNN object with the given predictors and responses set (this is
+   * the set that is used to train the network) and the given optimizer.
+   * Optionally, specify which initialize rule and performance function should
+   * be used.
+   *
+   * @param rho Maximum number of steps to backpropagate through time (BPTT).
+   * @param single Predict only the last element of the input sequence.
+   * @param outputLayer Output layer used to evaluate the network.
+   * @param initializeRule Optional instantiated InitializationRule object
+   *        for initializing the network parameter.
+   */
+  RNN(const size_t rho,
+      const bool single = false,
+      OutputLayerType outputLayer = OutputLayerType(),
+      InitializationRuleType initializeRule = InitializationRuleType());
+
+  /**
+   * Create the RNN object with the given predictors and responses set (this is
+   * the set that is used to train the network) and the given optimizer.
+   * Optionally, specify which initialize rule and performance function should
+   * be used.
+   *
+   * @param predictors Input training variables.
+   * @param responses Outputs results from input training variables.
+   * @param rho Maximum number of steps to backpropagate through time (BPTT).
+   * @param single Predict only the last element of the input sequence.
+   * @param outputLayer Output layer used to evaluate the network.
+   * @param initializeRule Optional instantiated InitializationRule object
+   *        for initializing the network parameter.
+   */
+  RNN(const arma::mat& predictors,
+      const arma::mat& responses,
+      const size_t rho,
+      const bool single = false,
+      OutputLayerType outputLayer = OutputLayerType(),
+      InitializationRuleType initializeRule = InitializationRuleType());
+
+  //! Destructor to release allocated memory.
+  ~RNN();
+
+  /**
+   * Train the recurrent neural network on the given input data using the given
+   * optimizer.
+   *
+   * This will use the existing model parameters as a starting point for the
+   * optimization. If this is not what you want, then you should access the
+   * parameters vector directly with Parameters() and modify it as desired.
+   *
+   * @tparam OptimizerType Type of optimizer to use to train the model.
+   * @param predictors Input training variables.
+   * @param responses Outputs results from input training variables.
+   * @param optimizer Instantiated optimizer used to train the model.
+   */
+  template<
+      template<typename, typename...> class OptimizerType =
+          mlpack::optimization::StandardSGD,
+      typename... OptimizerTypeArgs
+  >
+  void Train(const arma::mat& predictors,
+             const arma::mat& responses,
+             OptimizerType<NetworkType, OptimizerTypeArgs...>& optimizer);
+
+  /**
+   * Train the recurrent neural network on the given input data. By default, the
+   * SGD optimization algorithm is used, but others can be specified
+   * (such as mlpack::optimization::RMSprop).
+   *
+   * This will use the existing model parameters as a starting point for the
+   * optimization. If this is not what you want, then you should access the
+   * parameters vector directly with Parameters() and modify it as desired.
+   *
+   * @tparam OptimizerType Type of optimizer to use to train the model.
+   * @param predictors Input training variables.
+   * @param responses Outputs results from input training variables.
+   */
+  template<
+      template<typename...> class OptimizerType =
+          mlpack::optimization::StandardSGD
+  >
+  void Train(const arma::mat& predictors, const arma::mat& responses);
+
+  /**
+   * Predict the responses to a given set of predictors. The responses will
+   * reflect the output of the given output layer as returned by the
+   * output layer function.
+   *
+   * @param predictors Input predictors.
+   * @param results Matrix to put output predictions of responses into.
+   */
+  void Predict(arma::mat& predictors, arma::mat& results);
+
+  /**
+   * Evaluate the recurrent neural network with the given parameters. This
+   * function is usually called by the optimizer to train the model.
+   *
+   * @param parameters Matrix model parameters.
+   * @param i Index of point to use for objective function evaluation.
+   * @param deterministic Whether or not to train or test the model. Note some
+   *        layer act differently in training or testing mode.
+   */
+  double Evaluate(const arma::mat& /* parameters */,
+                  const size_t i,
+                  const bool deterministic = true);
+
+  /**
+   * Evaluate the gradient of the recurrent neural network with the given
+   * parameters, and with respect to only one point in the dataset. This is
+   * useful for optimizers such as SGD, which require a separable objective
+   * function.
+   *
+   * @param parameters Matrix of the model parameters to be optimized.
+   * @param i Index of points to use for objective function gradient evaluation.
+   * @param gradient Matrix to output gradient into.
+   */
+  void Gradient(const arma::mat& parameters,
+                const size_t i,
+                arma::mat& gradient);
+
+  /*
+   * Add a new module to the model.
+   *
+   * @param layer The Layer to be added to the model.
+   */
+  template<typename LayerType>
+  void Add(const LayerType& layer) { network.push_back(new LayerType(layer)); }
+
+  /*
+   * Add a new module to the model.
+   *
+   * @param args The layer parameter.
+   */
+  template <class LayerType, class... Args>
+  void Add(Args... args) { network.push_back(new LayerType(args...)); }
+
+  /*
+   * Add a new module to the model.
+   *
+   * @param layer The Layer to be added to the model.
+   */
+  void Add(LayerTypes layer) { network.push_back(layer); }
+
+  //! Return the number of separable functions (the number of predictor points).
+  size_t NumFunctions() const { return numFunctions; }
+
+  //! Return the initial point for the optimization.
+  const arma::mat& Parameters() const { return parameter; }
+  //! Modify the initial point for the optimization.
+  arma::mat& Parameters() { return parameter; }
+
+  //! Serialize the model.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */);
+
+ private:
+  // Helper functions.
+  /**
+   * The Forward algorithm (part of the Forward-Backward algorithm).  Computes
+   * forward probabilities for each module.
+   *
+   * @param input Data sequence to compute probabilities for.
+   */
+  void Forward(arma::mat&& input);
+
+  /**
+   * The Backward algorithm (part of the Forward-Backward algorithm). Computes
+   * backward pass for module.
+   */
+  void Backward();
+
+  /**
+   * Iterate through all layer modules and update the the gradient using the
+   * layer defined optimizer.
+   */
+  void Gradient();
+
+  /*
+   * Predict the response of the given input sequence.
+   *
+   * @param predictors Input predictors.
+   * @param results Vector to put output prediction of a response into.
+   */
+  void SinglePredict(const arma::mat& predictors, arma::mat& results);
+
+  /**
+   * Reset the module infomration (weights/parameters).
+   */
+  void ResetParameters();
+
+  /**
+   * Reset the module status by setting the current deterministic parameter
+   * for all modules that implement the Deterministic function.
+   */
+  void ResetDeterministic();
+
+  /**
+   * Reset the gradient for all modules that implement the Gradient function.
+   */
+  void ResetGradients(arma::mat& gradient);
+
+  //! Number of steps to backpropagate through time (BPTT).
+  size_t rho;
+
+  //! Instantiated outputlayer used to evaluate the network.
+  OutputLayerType outputLayer;
+
+  //! Instantiated InitializationRule object for initializing the network
+  //! parameter.
+  InitializationRuleType initializeRule;
+
+  //! The input size.
+  size_t inputSize;
+
+  //! The output size.
+  size_t outputSize;
+
+  //! The target size.
+  size_t targetSize;
+
+  //! Indicator if we already trained the model.
+  bool reset;
+
+    //! Only predict the last element of the input sequence.
+  bool single;
+
+  //! Locally-stored model modules.
+  std::vector<LayerTypes> network;
+
+  //! The matrix of data points (predictors).
+  arma::mat predictors;
+
+  //! The matrix of responses to the input data points.
+  arma::mat responses;
+
+  //! Matrix of (trained) parameters.
+  arma::mat parameter;
+
+  //! The number of separable functions (the number of predictor points).
+  size_t numFunctions;
+
+  //! The current error for the backward pass.
+  arma::mat error;
+
+  //! THe current input of the forward/backward pass.
+  arma::mat currentInput;
+
+  //! Locally-stored delta visitor.
+  DeltaVisitor deltaVisitor;
+
+  //! Locally-stored output parameter visitor.
+  OutputParameterVisitor outputParameterVisitor;
+
+  //! List of all module parameters for the backward pass (BBTT).
+  std::vector<arma::mat> moduleOutputParameter;
+
+  //! Locally-stored weight size visitor.
+  WeightSizeVisitor weightSizeVisitor;
+
+  //! Locally-stored reset visitor.
+  ResetVisitor resetVisitor;
+
+  //! Locally-stored delete visitor.
+  DeleteVisitor deleteVisitor;
+
+  //! The current evaluation mode (training or testing).
+  bool deterministic;
 }; // class RNN
 
-//! Network traits for the FFNN network.
-template <
-  typename ConnectionTypes,
-  typename OutputLayerType,
-  class PerformanceFunction
->
-class NetworkTraits<RNN<ConnectionTypes, OutputLayerType, PerformanceFunction> >
-{
- public:
-  static const bool IsFNN = false;
-  static const bool IsRNN = true;
-};
+} // namespace ann
+} // namespace mlpack
 
-}; // namespace ann
-}; // namespace mlpack
+// Include implementation.
+#include "rnn_impl.hpp"
 
 #endif

@@ -18,14 +18,23 @@
  *   year={2011}
  * }
  * @endcode
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHOS_ANN_INIT_RULES_KATHIRVALAVAKUMAR_SUBAVATHI_INIT_HPP
-#define __MLPACK_METHOS_ANN_INIT_RULES_KATHIRVALAVAKUMAR_SUBAVATHI_INIT_HPP
+#ifndef MLPACK_METHODS_ANN_INIT_RULES_KATHIRVALAVAKUMAR_SUBAVATHI_INIT_HPP
+#define MLPACK_METHODS_ANN_INIT_RULES_KATHIRVALAVAKUMAR_SUBAVATHI_INIT_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
+
+#include "init_rules_traits.hpp"
+#include "random_init.hpp"
+
 #include <mlpack/methods/ann/activation_functions/logistic_function.hpp>
 
-#include "random_init.hpp"
+#include <iostream>
 
 namespace mlpack {
 namespace ann /** Artificial Neural Network. */ {
@@ -35,21 +44,19 @@ namespace ann /** Artificial Neural Network. */ {
  * by T. Kathirvalavakumar and S. Subavathi. The method is based on sensitivity
  * analysis using using cauchy’s inequality. The method is defined by
  *
- * @f[
- * \={s} &=& f^{-1}(\={t})
- * \Theta^{1}_{p} \le \={s} \sqrt{\frac{3}{I\sum_{i=1}^{I}(x_{ip}^2)}}
- * \Theta^1 = min(\Theta_{p}^{1}); p=1,2,..,P
- * -\Theta^{1} \le w_{i}^{1} \le \Theta^{1} \\
- * @f]
+ * @f{eqnarray*}{
+ * \overline{s} &=& f^{-1}(\overline{t}) \\
+ * \Theta^{1}_{p} &\le& \overline{s}
+ *     \sqrt{\frac{3}{I \sum_{i = 1}^{I} (x_{ip}^2)}} \\
+ * \Theta^1 &=& min(\Theta_{p}^{1}); p=1,2,..,P \\
+ * -\Theta^{1} \le w_{i}^{1} &\le& \Theta^{1}
+ * @f}
  *
- * Where I is the number of inputs including the bias, p refers the pattern
+ * where I is the number of inputs including the bias, p refers the pattern
  * considered in training, f is the transfer function and \={s} is the active
  * region in which the derivative of the activation function is greater than 4%
  * of the maximum derivatives.
- *
- * @tparam MatType Type of matrix (should be arma::mat or arma::spmat).
  */
-template<typename MatType = arma::mat>
 class KathirvalavakumarSubavathiInitialization
 {
  public:
@@ -59,36 +66,70 @@ class KathirvalavakumarSubavathiInitialization
    * @param data The input patterns.
    * @param s Parameter that defines the active region.
    */
-  KathirvalavakumarSubavathiInitialization(const MatType& data, const double s)
-      : data(data), s(s) { }
+  template<typename eT>
+  KathirvalavakumarSubavathiInitialization(const arma::Mat<eT>& data,
+                                           const double s) : s(s)
+  {
+    dataSum = arma::sum(data % data);
+  }
 
   /**
    * Initialize the elements of the specified weight matrix with the
    * Kathirvalavakumar-Subavathi method.
    *
    * @param W Weight matrix to initialize.
-   * @param n_rows Number of rows.
-   * @return n_cols Number of columns.
+   * @param rows Number of rows.
+   * @param cols Number of columns.
    */
-  void Initialize(MatType& W, const size_t n_rows, const size_t n_cols)
+  template<typename eT>
+  void Initialize(arma::Mat<eT>& W, const size_t rows, const size_t cols)
   {
-    arma::rowvec b = s * arma::sqrt(3 / (n_rows * sum(data + data)));
-    double theta = b.min();
+    arma::Row<eT> b = s * arma::sqrt(3 / (rows * dataSum));
+    const double theta = b.min();
+    RandomInitialization randomInit(-theta, theta);
+    randomInit.Initialize(W, rows, cols);
+  }
 
-    RandomInitialization<MatType> randomInit(-theta, theta);
-    randomInit.Initialize(W, n_rows, n_cols);
+  /**
+   * Initialize the elements of the specified weight 3rd order tensor with the
+   * Kathirvalavakumar-Subavathi method.
+   *
+   * @param W Weight matrix to initialize.
+   * @param rows Number of rows.
+   * @param cols Number of columns.
+   */
+  template<typename eT>
+  void Initialize(arma::Cube<eT>& W,
+                  const size_t rows,
+                  const size_t cols,
+                  const size_t slices)
+  {
+    W = arma::Cube<eT>(rows, cols, slices);
+
+    for (size_t i = 0; i < slices; i++)
+      Initialize(W.slice(i), rows, cols);
   }
 
  private:
-  //! The input patterns.
-  MatType data;
+  //! Parameter that defines the sum of elements in each column.
+  arma::rowvec dataSum;
 
   //! Parameter that defines the active region.
-  const double s;
+  double s;
 }; // class KathirvalavakumarSubavathiInitialization
 
+//! Initialization traits of the kathirvalavakumar subavath initialization rule.
+template<>
+class InitTraits<KathirvalavakumarSubavathiInitialization>
+{
+ public:
+  //! The kathirvalavakumar subavath initialization rule is applied over the
+  //! entire network.
+  static const bool UseLayer = false;
+};
 
-}; // namespace ann
-}; // namespace mlpack
+
+} // namespace ann
+} // namespace mlpack
 
 #endif

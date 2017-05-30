@@ -1,13 +1,18 @@
 /**
-  * @file single_tree_traverser_impl.hpp
-  * @author Andrew Wells
-  *
-  * A class for traversing rectangle type trees with a given set of rules
-  * which indicate the branches to prune and the order in which to recurse.
-  * This is a depth-first traverser.
-  */
-#ifndef __MLPACK_CORE_TREE_RECTANGLE_TREE_SINGLE_TREE_TRAVERSER_IMPL_HPP
-#define __MLPACK_CORE_TREE_RECTANGLE_TREE_SINGLE_TREE_TRAVERSER_IMPL_HPP
+ * @file single_tree_traverser_impl.hpp
+ * @author Andrew Wells
+ *
+ * A class for traversing rectangle type trees with a given set of rules
+ * which indicate the branches to prune and the order in which to recurse.
+ * This is a depth-first traverser.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
+ */
+#ifndef MLPACK_CORE_TREE_RECTANGLE_TREE_SINGLE_TREE_TRAVERSER_IMPL_HPP
+#define MLPACK_CORE_TREE_RECTANGLE_TREE_SINGLE_TREE_TRAVERSER_IMPL_HPP
 
 #include "single_tree_traverser.hpp"
 
@@ -17,34 +22,38 @@
 namespace mlpack {
 namespace tree {
 
-template<typename SplitType,
-         typename DescentType,
+template<typename MetricType,
          typename StatisticType,
-         typename MatType>
+         typename MatType,
+         typename SplitType,
+         typename DescentType,
+         template<typename> class AuxiliaryInformationType>
 template<typename RuleType>
-RectangleTree<SplitType, DescentType, StatisticType, MatType>::
+RectangleTree<MetricType, StatisticType, MatType, SplitType, DescentType,
+              AuxiliaryInformationType>::
 SingleTreeTraverser<RuleType>::SingleTreeTraverser(RuleType& rule) :
     rule(rule),
     numPrunes(0)
 { /* Nothing to do */ }
 
-template<typename SplitType,
-         typename DescentType,
+template<typename MetricType,
          typename StatisticType,
-         typename MatType>
+         typename MatType,
+         typename SplitType,
+         typename DescentType,
+         template<typename> class AuxiliaryInformationType>
 template<typename RuleType>
-void RectangleTree<SplitType, DescentType, StatisticType, MatType>::
+void RectangleTree<MetricType, StatisticType, MatType, SplitType, DescentType,
+                   AuxiliaryInformationType>::
 SingleTreeTraverser<RuleType>::Traverse(
     const size_t queryIndex,
-    const RectangleTree<SplitType, DescentType, StatisticType, MatType>&
-        referenceNode)
+    const RectangleTree& referenceNode)
 {
-
   // If we reach a leaf node, we need to run the base case.
   if (referenceNode.IsLeaf())
   {
     for (size_t i = 0; i < referenceNode.Count(); i++)
-      rule.BaseCase(queryIndex, referenceNode.Points()[i]);
+      rule.BaseCase(queryIndex, referenceNode.Point(i));
 
     return;
   }
@@ -54,7 +63,7 @@ SingleTreeTraverser<RuleType>::Traverse(
   std::vector<NodeAndScore> nodesAndScores(referenceNode.NumChildren());
   for (size_t i = 0; i < referenceNode.NumChildren(); i++)
   {
-    nodesAndScores[i].node = referenceNode.Children()[i];
+    nodesAndScores[i].node = &(referenceNode.Child(i));
     nodesAndScores[i].score = rule.Score(queryIndex, *nodesAndScores[i].node);
   }
 
@@ -77,7 +86,7 @@ SingleTreeTraverser<RuleType>::Traverse(
   }
 }
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 #endif

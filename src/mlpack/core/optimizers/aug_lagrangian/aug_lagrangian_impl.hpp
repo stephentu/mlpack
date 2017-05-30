@@ -4,10 +4,15 @@
  *
  * Implementation of AugLagrangian class (Augmented Lagrangian optimization
  * method).
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 
-#ifndef __MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_IMPL_HPP
-#define __MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_IMPL_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_IMPL_HPP
+#define MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_IMPL_HPP
 
 #include <mlpack/core/optimizers/lbfgs/lbfgs.hpp>
 #include "aug_lagrangian_function.hpp"
@@ -47,19 +52,6 @@ bool AugLagrangian<LagrangianFunction>::Optimize(arma::mat& coordinates,
   augfunc.Sigma() = initSigma;
 
   return Optimize(coordinates, maxIterations);
-}
-
-// Convert the object to a string.
-template<typename LagrangianFunction>
-std::string AugLagrangian<LagrangianFunction>::ToString() const
-{
-  std::ostringstream convert;
-  convert << "AugLagrangian [" << this << "]" << std::endl;
-  convert << "  Function:" << std::endl;
-  convert << mlpack::util::Indent(function.ToString(), 2);
-  convert << "  L-BFGS optimizer:" << std::endl;
-  convert << mlpack::util::Indent(lbfgs.ToString(), 2);
-  return convert.str();
 }
 
 template<typename LagrangianFunction>
@@ -151,8 +143,8 @@ bool AugLagrangian<LagrangianFunction>::Optimize(arma::mat& coordinates,
   return false;
 }
 
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack
 
-#endif // __MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_IMPL_HPP
+#endif // MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_IMPL_HPP
 

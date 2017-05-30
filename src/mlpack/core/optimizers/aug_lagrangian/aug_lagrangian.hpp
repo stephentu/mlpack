@@ -5,12 +5,17 @@
  * Definition of AugLagrangian class, which implements the Augmented Lagrangian
  * optimization method (also called the 'method of multipliers'.  This class
  * uses the L-BFGS optimizer.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 
-#ifndef __MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_HPP
-#define __MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_HPP
+#define MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/core/optimizers/lbfgs/lbfgs.hpp>
 
 #include "aug_lagrangian_function.hpp"
@@ -118,9 +123,6 @@ class AugLagrangian
   //! Modify the penalty parameter.
   double& Sigma() { return augfunc.Sigma(); }
 
-  // convert the obkect into a string
-  std::string ToString() const;
-
  private:
   //! Function to be optimized.
   LagrangianFunction& function;
@@ -137,10 +139,10 @@ class AugLagrangian
   L_BFGSType& lbfgs;
 };
 
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack
 
 #include "aug_lagrangian_impl.hpp"
 
-#endif // __MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_HPP
+#endif // MLPACK_CORE_OPTIMIZERS_AUG_LAGRANGIAN_AUG_LAGRANGIAN_HPP
 

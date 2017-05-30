@@ -4,11 +4,16 @@
  *
  * The function to be optimized for softmax regression. Any mlpack optimizer
  * can be used.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_SOFTMAX_REGRESSION_SOFTMAX_REGRESSION_FUNCTION_HPP
-#define __MLPACK_METHODS_SOFTMAX_REGRESSION_SOFTMAX_REGRESSION_FUNCTION_HPP
+#ifndef MLPACK_METHODS_SOFTMAX_REGRESSION_SOFTMAX_REGRESSION_FUNCTION_HPP
+#define MLPACK_METHODS_SOFTMAX_REGRESSION_SOFTMAX_REGRESSION_FUNCTION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace regression {
@@ -20,7 +25,7 @@ class SoftmaxRegressionFunction
    * Construct the Softmax Regression objective function with the given
    * parameters.
    *
-   * @param data Input training features.
+   * @param data Input training data, each column associate with one sample
    * @param labels Labels associated with the feature data.
    * @param inputSize Size of the input feature vector.
    * @param numClasses Number of classes for classification.
@@ -28,8 +33,7 @@ class SoftmaxRegressionFunction
    * @param fitIntercept Intercept term flag.
    */
   SoftmaxRegressionFunction(const arma::mat& data,
-                            const arma::vec& labels,
-                            const size_t inputSize,
+                            const arma::Row<size_t>& labels,
                             const size_t numClasses,
                             const double lambda = 0.0001,
                             const bool fitIntercept = false);
@@ -38,12 +42,40 @@ class SoftmaxRegressionFunction
   const arma::mat InitializeWeights();
 
   /**
+   * Initialize Softmax Regression weights (trainable parameters) with the given
+   * parameters.
+   *
+   * @param featureSize The number of features in the training set.
+   * @param numClasses Number of classes for classification.
+   * @param fitIntercept If true, an intercept is fitted.
+   * @return Initialized model weights.
+   */
+  static const arma::mat InitializeWeights(const size_t featureSize,
+                                           const size_t numClasses,
+                                           const bool fitIntercept = false);
+
+  /**
+   * Initialize Softmax Regression weights (trainable parameters) with the given
+   * parameters.
+   *
+   * @param weights This will be filled with the initialized model weights.
+   * @param featureSize The number of features in the training set.
+   * @param numClasses Number of classes for classification.
+   * @param fitIntercept Intercept term flag.
+   */
+  static void InitializeWeights(arma::mat &weights,
+                                const size_t featureSize,
+                                const size_t numClasses,
+                                const bool fitIntercept = false);
+
+  /**
    * Constructs the ground truth label matrix with the passed labels.
    *
    * @param labels Labels associated with the training data.
    * @param groundTruth Pointer to arma::mat which stores the computed matrix.
    */
-  void GetGroundTruthMatrix(const arma::vec& labels, arma::sp_mat& groundTruth);
+  void GetGroundTruthMatrix(const arma::Row<size_t>& labels,
+                            arma::sp_mat& groundTruth);
 
   /**
    * Evaluate the probabilities matrix with the passed parameters.
@@ -82,15 +114,15 @@ class SoftmaxRegressionFunction
   //! Return the initial point for the optimization.
   const arma::mat& GetInitialPoint() const { return initialPoint; }
 
-  //! Sets the size of the input vector.
-  size_t& InputSize() { return inputSize; }
-  //! Gets the size of the input vector.
-  size_t InputSize() const { return inputSize; }
-
-  //! Sets the number of classes.
-  size_t& NumClasses() { return numClasses; }
   //! Gets the number of classes.
   size_t NumClasses() const { return numClasses; }
+
+  //! Gets the features size of the training data
+  size_t FeatureSize() const
+  {
+    return fitIntercept ? initialPoint.n_cols - 1 :
+                          initialPoint.n_cols;
+  }
 
   //! Sets the regularization parameter.
   double& Lambda() { return lambda; }
@@ -107,8 +139,6 @@ class SoftmaxRegressionFunction
   arma::sp_mat groundTruth;
   //! Initial parameter point.
   arma::mat initialPoint;
-  //! Size of input feature vector.
-  size_t inputSize;
   //! Number of classes.
   size_t numClasses;
   //! L2-regularization constant.
@@ -117,7 +147,7 @@ class SoftmaxRegressionFunction
   bool fitIntercept;
 };
 
-}; // namespace regression
-}; // namespace mlpack
+} // namespace regression
+} // namespace mlpack
 
 #endif

@@ -18,11 +18,16 @@
  *   year={1994}
  * }
  * @endcode
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHOS_ANN_INIT_RULES_OIVS_INIT_HPP
-#define __MLPACK_METHOS_ANN_INIT_RULES_OIVS_INIT_HPP
+#ifndef MLPACK_METHODS_ANN_INIT_RULES_OIVS_INIT_HPP
+#define MLPACK_METHODS_ANN_INIT_RULES_OIVS_INIT_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/methods/ann/activation_functions/logistic_function.hpp>
 
 #include "random_init.hpp"
@@ -35,23 +40,21 @@ namespace ann /** Artificial Neural Network. */ {
  * method is based on the equations representing the characteristics of the
  * information transformation mechanism of a node. The method is defined by
  *
- * @f[
- * b = |f^{-1}(1 - \epsilon) - f^{-1}(\epsilon)| \\
- * \^w = \frac{b}{k \cdot n} \\
- * \gamma \le a_i \le \gamma \\
- * w_i = \^w \cdot \sqrt{a_i + 1}
- * @f]
+ * @f{eqnarray*}{
+ * b &=& |F^{-1}(1 - \epsilon) - f^{-1}(\epsilon)| \\
+ * \hat{w} &=& \frac{b}{k \cdot n} \\
+ * \gamma &\le& a_i \le \gamma \\
+ * w_i &=& \hat{w} \cdot \sqrt{a_i + 1}
+ * @f}
  *
  * Where f is the transfer function epsilon, k custom parameters, n the number of
  * neurons in the outgoing layer and gamma a parameter that defines the random
  * interval.
  *
  * @tparam ActivationFunction The activation function used for the oivs method.
- * @tparam MatType Type of matrix (should be arma::mat or arma::spmat).
  */
 template<
-    class ActivationFunction = LogisticFunction,
-    typename MatType = arma::mat
+    class ActivationFunction = LogisticFunction
 >
 class OivsInitialization
 {
@@ -66,39 +69,62 @@ class OivsInitialization
   OivsInitialization(const double epsilon = 0.1,
                      const int k = 5,
                      const double gamma = 0.9) :
-      epsilon(epsilon), k(k), gamma(gamma) { }
+      k(k), gamma(gamma),
+      b(std::abs(ActivationFunction::Inv(1 - epsilon) -
+                 ActivationFunction::Inv(epsilon)))
+  {
+  }
 
   /**
    * Initialize the elements of the specified weight matrix with the oivs method.
    *
    * @param W Weight matrix to initialize.
-   * @param n_rows Number of rows.
-   * @return n_cols Number of columns.
+   * @param rows Number of rows.
+   * @param cols Number of columns.
    */
-  void Initialize(MatType& W, const size_t n_rows, const size_t n_cols)
+  template<typename eT>
+  void Initialize(arma::Mat<eT>& W, const size_t rows, const size_t cols)
   {
-    double b = std::abs(ActivationFunction::inv(1 - epsilon) -
-        ActivationFunction::inv(epsilon));
+    RandomInitialization randomInit(-gamma, gamma);
+    randomInit.Initialize(W, rows, cols);
 
-    RandomInitialization<MatType> randomInit(-gamma, gamma);
-    randomInit.Initialize(W, n_rows, n_cols);
+    W = (b / (k  * rows)) * arma::sqrt(W + 1);
+  }
 
-    W = (b / (k  * n_rows)) * arma::sqrt(W + 1);
+  /**
+   * Initialize the elements of the specified weight 3rd order tensor with the
+   * oivs method.
+   *
+   * @param W 3rd order tensor to initialize.
+   * @param rows Number of rows.
+   * @param cols Number of columns.
+   * @param slices Number of slices.
+   */
+  template<typename eT>
+  void Initialize(arma::Cube<eT>& W,
+                  const size_t rows,
+                  const size_t cols,
+                  const size_t slices)
+  {
+    W = arma::Cube<eT>(rows, cols, slices);
+
+    for (size_t i = 0; i < slices; i++)
+      Initialize(W.slice(i), rows, cols);
   }
 
  private:
-  //! Parameter to control the activation region.
-  const double epsilon;
-
   //! Parameter to control the activation region width.
-  const int k;
+  int k;
 
   //! Parameter to define the uniform random range.
-  const double gamma;
+  double gamma;
+
+  //! Parameter to control the activation region.
+  double b;
 }; // class OivsInitialization
 
 
-}; // namespace ann
-}; // namespace mlpack
+} // namespace ann
+} // namespace mlpack
 
 #endif

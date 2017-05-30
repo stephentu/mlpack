@@ -1,37 +1,32 @@
 /**
  * @file activation_functions_test.cpp
  * @author Marcus Edel
+ * @author Dhawal Arora
  *
  * Tests for the various activation functions.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #include <mlpack/core.hpp>
 
+#include <mlpack/methods/ann/layer/layer.hpp>
 #include <mlpack/methods/ann/activation_functions/logistic_function.hpp>
 #include <mlpack/methods/ann/activation_functions/identity_function.hpp>
 #include <mlpack/methods/ann/activation_functions/softsign_function.hpp>
 #include <mlpack/methods/ann/activation_functions/tanh_function.hpp>
 #include <mlpack/methods/ann/activation_functions/rectifier_function.hpp>
-
-#include <mlpack/methods/ann/ffnn.hpp>
-#include <mlpack/methods/ann/init_rules/random_init.hpp>
-#include <mlpack/methods/ann/layer/neuron_layer.hpp>
-#include <mlpack/methods/ann/layer/bias_layer.hpp>
-#include <mlpack/methods/ann/layer/multiclass_classification_layer.hpp>
-#include <mlpack/methods/ann/connections/full_connection.hpp>
-#include <mlpack/methods/ann/connections/self_connection.hpp>
-#include <mlpack/methods/ann/optimizer/irpropp.hpp>
+#include <mlpack/methods/ann/activation_functions/softplus_function.hpp>
 
 #include <boost/test/unit_test.hpp>
-#include "old_boost_test_definitions.hpp"
+#include "test_tools.hpp"
 
 using namespace mlpack;
 using namespace mlpack::ann;
 
 BOOST_AUTO_TEST_SUITE(ActivationFunctionsTest);
-
-// Be careful!  When writing new tests, always get the boolean value and store
-// it in a temporary, because the Boost unit test macros do weird things and
-// will cause bizarre problems.
 
 // Generate dataset for activation function tests.
 const arma::colvec activationData("-2 3.2 4.5 -100.2 1 -1 2 0");
@@ -50,13 +45,13 @@ void CheckActivationCorrect(const arma::colvec input, const arma::colvec target)
   // Test the activation function using a single value as input.
   for (size_t i = 0; i < target.n_elem; i++)
   {
-    BOOST_REQUIRE_CLOSE(ActivationFunction::fn(input.at(i)),
+    BOOST_REQUIRE_CLOSE(ActivationFunction::Fn(input.at(i)),
         target.at(i), 1e-3);
   }
 
   // Test the activation function using the entire vector as input.
   arma::colvec activations;
-  ActivationFunction::fn(input, activations);
+  ActivationFunction::Fn(input, activations);
   for (size_t i = 0; i < activations.n_elem; i++)
   {
     BOOST_REQUIRE_CLOSE(activations.at(i), target.at(i), 1e-3);
@@ -77,13 +72,13 @@ void CheckDerivativeCorrect(const arma::colvec input, const arma::colvec target)
   // Test the calculation of the derivatives using a single value as input.
   for (size_t i = 0; i < target.n_elem; i++)
   {
-    BOOST_REQUIRE_CLOSE(ActivationFunction::deriv(input.at(i)),
+    BOOST_REQUIRE_CLOSE(ActivationFunction::Deriv(input.at(i)),
         target.at(i), 1e-3);
   }
 
   // Test the calculation of the derivatives using the entire vector as input.
   arma::colvec derivatives;
-  ActivationFunction::deriv(input, derivatives);
+  ActivationFunction::Deriv(input, derivatives);
   for (size_t i = 0; i < derivatives.n_elem; i++)
   {
     BOOST_REQUIRE_CLOSE(derivatives.at(i), target.at(i), 1e-3);
@@ -104,19 +99,229 @@ void CheckInverseCorrect(const arma::colvec input)
     // Test the calculation of the inverse using a single value as input.
   for (size_t i = 0; i < input.n_elem; i++)
   {
-    BOOST_REQUIRE_CLOSE(ActivationFunction::inv(ActivationFunction::fn(
+    BOOST_REQUIRE_CLOSE(ActivationFunction::Inv(ActivationFunction::Fn(
         input.at(i))), input.at(i), 1e-3);
   }
 
   // Test the calculation of the inverse using the entire vector as input.
   arma::colvec activations;
-  ActivationFunction::fn(input, activations);
-  ActivationFunction::inv(activations, activations);
+  ActivationFunction::Fn(input, activations);
+  ActivationFunction::Inv(activations, activations);
 
   for (size_t i = 0; i < input.n_elem; i++)
   {
     BOOST_REQUIRE_CLOSE(activations.at(i), input.at(i), 1e-3);
   }
+}
+
+/*
+ * Implementation of the HardTanH activation function test. The function is
+ * implemented as a HardTanH Layer in hard_tanh.hpp
+ *
+ * @param input Input data used for evaluating the HardTanH activation function.
+ * @param target Target data used to evaluate the HardTanH activation.
+ */
+void CheckHardTanHActivationCorrect(const arma::colvec input,
+                                    const arma::colvec target)
+{
+  HardTanH<> htf;
+
+  // Test the activation function using the entire vector as input.
+  arma::colvec activations;
+  htf.Forward(std::move(input), std::move(activations));
+  for (size_t i = 0; i < activations.n_elem; i++)
+  {
+    BOOST_REQUIRE_CLOSE(activations.at(i), target.at(i), 1e-3);
+  }
+}
+
+/*
+ * Implementation of the HardTanH activation function derivative test. The
+ * derivative is implemented as HardTanH Layer in hard_tanh.hpp
+ *
+ * @param input Input data used for evaluating the HardTanH activation function.
+ * @param target Target data used to evaluate the HardTanH activation.
+ */
+void CheckHardTanHDerivativeCorrect(const arma::colvec input,
+                                    const arma::colvec target)
+{
+  HardTanH<> htf;
+
+  // Test the calculation of the derivatives using the entire vector as input.
+  arma::colvec derivatives;
+
+  // This error vector will be set to 1 to get the derivatives.
+  arma::colvec error = arma::ones<arma::colvec>(input.n_elem);
+  htf.Backward(std::move(input), std::move(error), std::move(derivatives));
+
+  for (size_t i = 0; i < derivatives.n_elem; i++)
+  {
+    BOOST_REQUIRE_CLOSE(derivatives.at(i), target.at(i), 1e-3);
+  }
+}
+
+/*
+ * Implementation of the LeakyReLU activation function test. The function is
+ * implemented as LeakyReLU layer in the file leaky_relu.hpp
+ *
+ * @param input Input data used for evaluating the LeakyReLU activation function.
+ * @param target Target data used to evaluate the LeakyReLU activation.
+ */
+void CheckLeakyReLUActivationCorrect(const arma::colvec input,
+                                     const arma::colvec target)
+{
+  LeakyReLU<> lrf;
+
+  // Test the activation function using the entire vector as input.
+  arma::colvec activations;
+  lrf.Forward(std::move(input), std::move(activations));
+  for (size_t i = 0; i < activations.n_elem; i++)
+  {
+    BOOST_REQUIRE_CLOSE(activations.at(i), target.at(i), 1e-3);
+  }
+}
+
+/*
+ * Implementation of the LeakyReLU activation function derivative test.
+ * The derivative function is implemented as LeakyReLU layer in the file
+ * leaky_relu_layer.hpp
+ *
+ * @param input Input data used for evaluating the LeakyReLU activation function.
+ * @param target Target data used to evaluate the LeakyReLU activation.
+ */
+void CheckLeakyReLUDerivativeCorrect(const arma::colvec input,
+                                     const arma::colvec target)
+{
+  LeakyReLU<> lrf;
+
+  // Test the calculation of the derivatives using the entire vector as input.
+  arma::colvec derivatives;
+
+  // This error vector will be set to 1 to get the derivatives.
+  arma::colvec error = arma::ones<arma::colvec>(input.n_elem);
+  lrf.Backward(std::move(input), std::move(error), std::move(derivatives));
+  for (size_t i = 0; i < derivatives.n_elem; i++)
+  {
+    BOOST_REQUIRE_CLOSE(derivatives.at(i), target.at(i), 1e-3);
+  }
+}
+
+/*
+ * Implementation of the ELU activation function test. The function is
+ * implemented as ELU layer in the file elu.hpp
+ *
+ * @param input Input data used for evaluating the ELU activation function.
+ * @param target Target data used to evaluate the ELU activation.
+ */
+void CheckELUActivationCorrect(const arma::colvec input,
+                                     const arma::colvec target)
+{
+  ELU<> lrf;
+
+  // Test the activation function using the entire vector as input.
+  arma::colvec activations;
+  lrf.Forward(std::move(input), std::move(activations));
+  for (size_t i = 0; i < activations.n_elem; i++)
+  {
+    BOOST_REQUIRE_CLOSE(activations.at(i), target.at(i), 1e-3);
+  }
+}
+
+/*
+ * Implementation of the ELU activation function derivative test. The function
+ * is implemented as ELU layer in the file elu.hpp
+ *
+ * @param input Input data used for evaluating the ELU activation function.
+ * @param target Target data used to evaluate the ELU activation.
+ */
+void CheckELUDerivativeCorrect(const arma::colvec input,
+                                     const arma::colvec target)
+{
+  ELU<> lrf;
+
+  // Test the calculation of the derivatives using the entire vector as input.
+  arma::colvec derivatives;
+
+  // This error vector will be set to 1 to get the derivatives.
+  arma::colvec error = arma::ones<arma::colvec>(input.n_elem);
+  lrf.Backward(std::move(input), std::move(error), std::move(derivatives));
+  for (size_t i = 0; i < derivatives.n_elem; i++)
+  {
+    BOOST_REQUIRE_CLOSE(derivatives.at(i), target.at(i), 1e-3);
+  }
+}
+
+/*
+ * Implementation of the PReLU activation function test. The function
+ * is implemented as PReLU layer in the file perametric_relu.hpp
+ *
+ * @param input Input data used for evaluating the PReLU activation
+ *   function.
+ * @param target Target data used to evaluate the PReLU activation.
+ */
+void CheckPReLUActivationCorrect(const arma::colvec input,
+                                          const arma::colvec target)
+{
+  PReLU<> prelu;
+
+  // Test the activation function using the entire vector as input.
+  arma::colvec activations;
+  prelu.Forward(std::move(input), std::move(activations));
+  for (size_t i = 0; i < activations.n_elem; i++)
+  {
+    BOOST_REQUIRE_CLOSE(activations.at(i), target.at(i), 1e-3);
+  }
+}
+
+/*
+ * Implementation of the PReLU activation function derivative test.
+ * The function is implemented as PReLU layer in the file
+ * perametric_relu.hpp
+ *
+ * @param input Input data used for evaluating the PReLU activation
+ *   function.
+ * @param target Target data used to evaluate the PReLU activation.
+ */
+void CheckPReLUDerivativeCorrect(const arma::colvec input,
+                                          const arma::colvec target)
+{
+  PReLU<> prelu;
+
+  // Test the calculation of the derivatives using the entire vector as input.
+  arma::colvec derivatives;
+
+  // This error vector will be set to 1 to get the derivatives.
+  arma::colvec error = arma::ones<arma::colvec>(input.n_elem);
+  prelu.Backward(std::move(input), std::move(error), std::move(derivatives));
+  for (size_t i = 0; i < derivatives.n_elem; i++)
+  {
+    BOOST_REQUIRE_CLOSE(derivatives.at(i), target.at(i), 1e-3);
+  }
+}
+
+/*
+ * Implementation of the PReLU activation function gradient test.
+ * The function is implemented as PReLU layer in the file
+ * perametric_relu.hpp
+ *
+ * @param input Input data used for evaluating the PReLU activation
+ *   function.
+ * @param target Target data used to evaluate the PReLU gradient.
+ */
+void CheckPReLUGradientCorrect(const arma::colvec input,
+                                        const arma::colvec target)
+{
+  PReLU<> prelu;
+
+  // Test the calculation of the derivatives using the entire vector as input.
+  arma::colvec gradient;
+
+  // This error vector will be set to 1 to get the gradient.
+  arma::colvec error = arma::ones<arma::colvec>(input.n_elem);
+  prelu.Gradient(std::move(input), std::move(error), std::move(gradient));
+  BOOST_REQUIRE_EQUAL(gradient.n_rows, 1);
+  BOOST_REQUIRE_EQUAL(gradient.n_cols, 1);
+  BOOST_REQUIRE_CLOSE(gradient(0), target(0), 1e-3);
 }
 
 /**
@@ -198,188 +403,85 @@ BOOST_AUTO_TEST_CASE(RectifierFunctionTest)
       desiredDerivatives);
 }
 
-/*
- * Implementation of the numerical gradient checking.
- *
- * @param input Input data used for evaluating the network.
- * @param target Target data used to calculate the network error.
- * @param perturbation Constant perturbation value.
- * @param threshold Threshold used as bounding check.
- *
- * @tparam ActivationFunction Activation function used for the gradient check.
+/**
+ * Basic test of the LeakyReLU function.
  */
-template<class ActivationFunction>
-void CheckGradientNumericallyCorrect(const arma::colvec input,
-                                     const arma::colvec target,
-                                     const double perturbation,
-                                     const double threshold)
+BOOST_AUTO_TEST_CASE(LeakyReLUFunctionTest)
 {
-  // Specify the structure of the feed forward neural network.
-  RandomInitialization<> randInit(-0.5, 0.5);
-  arma::colvec error;
+  const arma::colvec desiredActivations("-0.06 3.2 4.5 -3.006 \
+                                         1 -0.03 2 0");
 
-  NeuronLayer<ActivationFunction> inputLayer(input.n_elem);
+  const arma::colvec desiredDerivatives("0.03 1 1 0.03 \
+                                         1 0.03 1 1");
 
-  BiasLayer<> biasLayer0(1);
-  BiasLayer<> biasLayer1(1);
-  BiasLayer<> biasLayer2(1);
-
-  NeuronLayer<ActivationFunction> hiddenLayer0(4);
-  NeuronLayer<ActivationFunction> hiddenLayer1(2);
-  NeuronLayer<ActivationFunction> hiddenLayer2(target.n_elem);
-
-  iRPROPp< > conOptimizer0(input.n_elem, hiddenLayer0.InputSize());
-  iRPROPp< > conOptimizer1(1, 4);
-  iRPROPp< > conOptimizer2(4, 2);
-  iRPROPp< > conOptimizer3(1, 2);
-  iRPROPp< > conOptimizer4(2, target.n_elem);
-  iRPROPp< > conOptimizer5(1, target.n_elem);
-
-  ClassificationLayer<> outputLayer;
-
-  FullConnection<
-      decltype(inputLayer),
-      decltype(hiddenLayer0),
-      decltype(conOptimizer0),
-      decltype(randInit)>
-      layerCon0(inputLayer, hiddenLayer0, conOptimizer0, randInit);
-
-  FullConnection<
-    decltype(biasLayer0),
-    decltype(hiddenLayer0),
-    decltype(conOptimizer1),
-    decltype(randInit)>
-    layerCon1(biasLayer0, hiddenLayer0, conOptimizer1, randInit);
-
-  FullConnection<
-      decltype(hiddenLayer0),
-      decltype(hiddenLayer1),
-      decltype(conOptimizer2),
-      decltype(randInit)>
-      layerCon2(hiddenLayer0, hiddenLayer1, conOptimizer2, randInit);
-
-  FullConnection<
-    decltype(biasLayer1),
-    decltype(hiddenLayer1),
-    decltype(conOptimizer3),
-    decltype(randInit)>
-    layerCon3(biasLayer1, hiddenLayer1, conOptimizer3, randInit);
-
-  FullConnection<
-      decltype(hiddenLayer1),
-      decltype(hiddenLayer2),
-      decltype(conOptimizer4),
-      decltype(randInit)>
-      layerCon4(hiddenLayer1, hiddenLayer2, conOptimizer4, randInit);
-
-  FullConnection<
-    decltype(biasLayer2),
-    decltype(hiddenLayer2),
-    decltype(conOptimizer5),
-    decltype(randInit)>
-    layerCon5(biasLayer2, hiddenLayer2, conOptimizer5, randInit);
-
-  auto module0 = std::tie(layerCon0, layerCon1);
-  auto module1 = std::tie(layerCon2, layerCon3);
-  auto module2 = std::tie(layerCon4, layerCon5);
-  auto modules = std::tie(module0, module1, module2);
-
-  FFNN<decltype(modules), decltype(outputLayer)> net(modules, outputLayer);
-
-  // Initialize the feed forward neural network.
-  net.FeedForward(input, target, error);
-  net.FeedBackward(error);
-
-  std::vector<std::reference_wrapper<
-      FullConnection<
-      decltype(inputLayer),
-      decltype(hiddenLayer0),
-      decltype(conOptimizer0),
-      decltype(randInit)> > > layer {layerCon0, layerCon2, layerCon4};
-
-  std::vector<arma::mat> gradient {
-      hiddenLayer0.Delta() * inputLayer.InputActivation().t(),
-      hiddenLayer1.Delta() * hiddenLayer0.InputActivation().t(),
-      hiddenLayer2.Delta() * hiddenLayer1.InputActivation().t() };
-
-  double weight, mLoss, pLoss, dW, e;
-
-  for (size_t l = 0; l < layer.size(); ++l)
-  {
-    for (size_t i = 0; i < layer[l].get().Weights().n_rows; ++i)
-    {
-      for (size_t j = 0; j < layer[l].get().Weights().n_cols; ++j)
-      {
-        // Store original weight.
-        weight = layer[l].get().Weights()(i, j);
-
-        // Add negative perturbation and compute error.
-        layer[l].get().Weights().at(i, j) -= perturbation;
-        net.FeedForward(input, target, error);
-        mLoss = arma::as_scalar(0.5 * arma::sum(arma::pow(error, 2)));
-
-        // Add positive perturbation and compute error.
-        layer[l].get().Weights().at(i, j) += (2 * perturbation);
-        net.FeedForward(input, target, error);
-        pLoss = arma::as_scalar(0.5 * arma::sum(arma::pow(error, 2)));
-
-        // Compute symmetric difference.
-        dW = (pLoss - mLoss) / (2 * perturbation);
-        e = std::abs(dW - gradient[l].at(i, j));
-
-        bool b = e < threshold;
-        BOOST_REQUIRE_EQUAL(b, 1);
-
-        // Restore original weight.
-        layer[l].get().Weights().at(i, j) = weight;
-      }
-    }
-  }
+  CheckLeakyReLUActivationCorrect(activationData, desiredActivations);
+  CheckLeakyReLUDerivativeCorrect(desiredActivations, desiredDerivatives);
 }
 
 /**
- * The following test implements numerical gradient checking. It computes the
- * numerical gradient, a numerical approximation of the partial derivative of J
- * with respect to the i-th input argument, evaluated at g. The numerical
- * gradient should be approximately the partial derivative of J with respect to
- * g(i).
- *
- * Given a function g(\theta) that is supposedly computing:
- *
- * @f[
- * \frac{\partial}{\partial \theta} J(\theta)
- * @f]
- *
- * we can now numerically verify its correctness by checking:
- *
- * @f[
- * g(\theta) \approx \frac{J(\theta + eps) - J(\theta - eps)}{2 * eps}
- * @f]
+ * Basic test of the HardTanH function.
  */
-BOOST_AUTO_TEST_CASE(GradientNumericallyCorrect)
+BOOST_AUTO_TEST_CASE(HardTanHFunctionTest)
 {
-  // Initialize dataset.
-  const arma::colvec input = arma::randu<arma::colvec>(10);
-  const arma::colvec target("0 1;");
+  const arma::colvec desiredActivations("-1 1 1 -1 \
+                                         1 -1 1 0");
 
-  // Perturbation and threshold constant.
-  const double perturbation = 1e-6;
-  const double threshold = 1e-7;
+  const arma::colvec desiredDerivatives("0 0 0 0 \
+                                         1 1 0 1");
 
-  CheckGradientNumericallyCorrect<LogisticFunction>(input, target,
-      perturbation, threshold);
+  CheckHardTanHActivationCorrect(activationData, desiredActivations);
+  CheckHardTanHDerivativeCorrect(activationData, desiredDerivatives);
+}
 
-  CheckGradientNumericallyCorrect<IdentityFunction>(input, target,
-      perturbation, threshold);
+/**
+ * Basic test of the ELU function.
+ */
+BOOST_AUTO_TEST_CASE(ELUFunctionTest)
+{
+  const arma::colvec desiredActivations("-0.86466471 3.2 4.5 -1.0 \
+                                         1 -0.63212055 2 0");
 
-  CheckGradientNumericallyCorrect<RectifierFunction>(input, target,
-      perturbation, threshold);
+  const arma::colvec desiredDerivatives("0.13533529 1 1 0 \
+                                         1 0.36787945 1 1");
 
-  CheckGradientNumericallyCorrect<SoftsignFunction>(input, target,
-      perturbation, threshold);
+  CheckELUActivationCorrect(activationData, desiredActivations);
+  CheckELUDerivativeCorrect(desiredActivations, desiredDerivatives);
+}
 
-  CheckGradientNumericallyCorrect<TanhFunction>(input, target,
-      perturbation, threshold);
+/**
+ * Basic test of the softplus function.
+ */
+BOOST_AUTO_TEST_CASE(SoftplusFunctionTest)
+{
+  const arma::colvec desiredActivations("0.12692801 3.23995333 4.51104774 \
+                                         0 1.31326168 0.31326168 2.12692801 \
+                                         0.69314718");
+
+  const arma::colvec desiredDerivatives("0.53168946 0.96231041 0.98913245 \
+                                         0.5 0.78805844 0.57768119 0.89349302\
+                                         0.66666666");
+
+  CheckActivationCorrect<SoftplusFunction>(activationData, desiredActivations);
+  CheckDerivativeCorrect<SoftplusFunction>(desiredActivations,
+      desiredDerivatives);
+  CheckInverseCorrect<SoftplusFunction>(desiredActivations);
+}
+
+/**
+ * Basic test of the PReLU function.
+ */
+BOOST_AUTO_TEST_CASE(PReLUFunctionTest)
+{
+  const arma::colvec desiredActivations("-0.06 3.2 4.5 -3.006 \
+                                         1 -0.03 2 0");
+
+  const arma::colvec desiredDerivatives("0.03 1 1 0.03 \
+                                         1 0.03 1 1");
+  const arma::colvec desiredGradient("-103.2");
+
+  CheckPReLUActivationCorrect(activationData, desiredActivations);
+  CheckPReLUDerivativeCorrect(desiredActivations, desiredDerivatives);
+  CheckPReLUGradientCorrect(activationData, desiredGradient);
 }
 
 BOOST_AUTO_TEST_SUITE_END();

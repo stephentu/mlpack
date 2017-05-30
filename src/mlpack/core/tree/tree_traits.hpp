@@ -5,9 +5,14 @@
  * This file implements the basic, unspecialized TreeTraits class, which
  * provides information about tree types.  If you create a tree class, you
  * should specialize this class with the characteristics of your tree.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_TREE_TREE_TRAITS_HPP
-#define __MLPACK_CORE_TREE_TREE_TRAITS_HPP
+#ifndef MLPACK_CORE_TREE_TREE_TRAITS_HPP
+#define MLPACK_CORE_TREE_TREE_TRAITS_HPP
 
 namespace mlpack {
 namespace tree {
@@ -38,8 +43,8 @@ namespace tree {
  * @code
  * template<typename TreeType>
  * void Compute(TreeType& node,
- *              boost::enable_if<
- *                  TreeTraits<TreeType>::RearrangesDataset>::type*)
+ *              std::enable_if_t<
+ *                  TreeTraits<TreeType>::RearrangesDataset>*)
  * {
  *   // Computation where special dataset-rearranging tree constructor is
  *   // called.
@@ -47,23 +52,22 @@ namespace tree {
  *
  * template<typename TreeType>
  * void Compute(TreeType& node,
- *              boost::enable_if<
- *                  !TreeTraits<TreeType>::RearrangesDataset>::type*)
+ *              std::enable_if_t<
+ *                  !TreeTraits<TreeType>::RearrangesDataset>*)
  * {
  *   // Computation where normal tree constructor is called.
  * }
  * @endcode
  *
- * In those two examples, the boost::enable_if<> class takes a boolean template
+ * In those two examples, the std::enable_if_t<> class takes a boolean template
  * parameter which allows that function to be called when the boolean is true.
  *
  * Each trait must be a static const value and not a function; only const values
- * can be used as template parameters (with the exception of constexprs, which
- * are a C++11 feature; but MLPACK is not using C++11).  By default (the
- * unspecialized implementation of TreeTraits), each parameter is set to make as
- * few assumptions about the tree as possible; so, even if TreeTraits is not
- * specialized for a particular tree type, tree-based algorithms should still
- * work.
+ * can be used as template parameters (or constexprs can be used too).  By
+ * default (the unspecialized implementation of TreeTraits), each parameter is
+ * set to make as few assumptions about the tree as possible; so, even if
+ * TreeTraits is not specialized for a particular tree type, tree-based
+ * algorithms should still work.
  *
  * When you write your own tree, you must specialize the TreeTraits class to
  * your tree type and set the corresponding values appropriately.  See
@@ -80,7 +84,12 @@ class TreeTraits
   static const bool HasOverlappingChildren = true;
 
   /**
-   * This is true if Point(0) is the centroid of the node.
+   * This is true if a point can be included in more than one node.
+   */
+  static const bool HasDuplicatedPoints = false;
+
+  /**
+   * This is true if the first point of each node is the centroid of its bound.
    */
   static const bool FirstPointIsCentroid = false;
 
@@ -94,9 +103,20 @@ class TreeTraits
    * This is true if the tree rearranges points in the dataset when it is built.
    */
   static const bool RearrangesDataset = false;
+
+  /**
+   * This is true if the tree always has only two children.
+   */
+  static const bool BinaryTree = false;
+
+  /**
+   * This is true if the NumDescendants() method doesn't include duplicated
+   * points.
+   */
+  static const bool UniqueNumDescendants = true;
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 #endif

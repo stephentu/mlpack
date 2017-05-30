@@ -3,6 +3,11 @@
  * @author Ryan Curtin
  *
  * Tests for each of the implementations of the SortPolicy class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #include <mlpack/core.hpp>
 #include <mlpack/core/tree/binary_space_tree.hpp>
@@ -12,11 +17,13 @@
 #include <mlpack/methods/neighbor_search/sort_policies/furthest_neighbor_sort.hpp>
 
 #include <boost/test/unit_test.hpp>
-#include "old_boost_test_definitions.hpp"
+#include "test_tools.hpp"
 
 using namespace mlpack;
 using namespace mlpack::neighbor;
 using namespace mlpack::bound;
+using namespace mlpack::tree;
+using namespace mlpack::metric;
 
 BOOST_AUTO_TEST_SUITE(SortPolicyTest);
 
@@ -55,42 +62,6 @@ BOOST_AUTO_TEST_CASE(NnsIsBetterNotStrict)
 }
 
 /**
- * A simple test case of where to insert when all the values in the list are
- * DBL_MAX.
- */
-BOOST_AUTO_TEST_CASE(NnsSortDistanceAllDblMax)
-{
-  arma::vec list(5);
-  list.fill(DBL_MAX);
-  arma::Col<size_t> indices(5);
-  indices.fill(0);
-
-  // Should be inserted at the head of the list.
-  BOOST_REQUIRE(NearestNeighborSort::SortDistance(list, indices, 5.0) == 0);
-}
-
-/**
- * Another test case, where we are just putting the new value in the middle of
- * the list.
- */
-BOOST_AUTO_TEST_CASE(NnsSortDistance2)
-{
-  arma::vec list(3);
-  list[0] = 0.66;
-  list[1] = 0.89;
-  list[2] = 1.14;
-  arma::Col<size_t> indices(3);
-  indices.fill(0);
-
-  // Run a couple possibilities through.
-  BOOST_REQUIRE(NearestNeighborSort::SortDistance(list, indices, 0.61) == 0);
-  BOOST_REQUIRE(NearestNeighborSort::SortDistance(list, indices, 0.76) == 1);
-  BOOST_REQUIRE(NearestNeighborSort::SortDistance(list, indices, 0.99) == 2);
-  BOOST_REQUIRE(NearestNeighborSort::SortDistance(list, indices, 1.22) ==
-      (size_t() - 1));
-}
-
-/**
  * Very simple sanity check to ensure that bounds are working alright.  We will
  * use a one-dimensional bound for simplicity.
  */
@@ -99,19 +70,18 @@ BOOST_AUTO_TEST_CASE(NnsNodeToNodeDistance)
   // Well, there's no easy way to make HRectBounds the way we want, so we have
   // to make them and then expand the region to include new points.
   arma::mat dataset("1");
-  tree::BinarySpaceTree<HRectBound<2>, tree::EmptyStatistic, arma::mat>
-      nodeOne(dataset);
+  typedef KDTree<EuclideanDistance, EmptyStatistic, arma::mat> TreeType;
+  TreeType nodeOne(dataset);
   arma::vec utility(1);
   utility[0] = 0;
 
-  nodeOne.Bound() = HRectBound<2>(1);
+  nodeOne.Bound() = HRectBound<EuclideanDistance>(1);
   nodeOne.Bound() |= utility;
   utility[0] = 1;
   nodeOne.Bound() |= utility;
 
-  tree::BinarySpaceTree<HRectBound<2>, tree::EmptyStatistic, arma::mat>
-      nodeTwo(dataset);
-  nodeTwo.Bound() = HRectBound<2>(1);
+  TreeType nodeTwo(dataset);
+  nodeTwo.Bound() = HRectBound<EuclideanDistance>(1);
 
   utility[0] = 5;
   nodeTwo.Bound() |= utility;
@@ -156,8 +126,9 @@ BOOST_AUTO_TEST_CASE(NnsPointToNodeDistance)
   utility[0] = 0;
 
   arma::mat dataset("1");
-  tree::BinarySpaceTree<HRectBound<2> > node(dataset);
-  node.Bound() = HRectBound<2>(1);
+  typedef KDTree<EuclideanDistance, EmptyStatistic, arma::mat> TreeType;
+  TreeType node(dataset);
+  node.Bound() = HRectBound<EuclideanDistance>(1);
   node.Bound() |= utility;
   utility[0] = 1;
   node.Bound() |= utility;
@@ -217,42 +188,6 @@ BOOST_AUTO_TEST_CASE(FnsIsBetterNotStrict)
 }
 
 /**
- * A simple test case of where to insert when all the values in the list are
- * 0.
- */
-BOOST_AUTO_TEST_CASE(FnsSortDistanceAllZero)
-{
-  arma::vec list(5);
-  list.fill(0);
-  arma::Col<size_t> indices(5);
-  indices.fill(0);
-
-  // Should be inserted at the head of the list.
-  BOOST_REQUIRE(FurthestNeighborSort::SortDistance(list, indices, 5.0) == 0);
-}
-
-/**
- * Another test case, where we are just putting the new value in the middle of
- * the list.
- */
-BOOST_AUTO_TEST_CASE(FnsSortDistance2)
-{
-  arma::vec list(3);
-  list[0] = 1.14;
-  list[1] = 0.89;
-  list[2] = 0.66;
-  arma::Col<size_t> indices(3);
-  indices.fill(0);
-
-  // Run a couple possibilities through.
-  BOOST_REQUIRE(FurthestNeighborSort::SortDistance(list, indices, 1.22) == 0);
-  BOOST_REQUIRE(FurthestNeighborSort::SortDistance(list, indices, 0.93) == 1);
-  BOOST_REQUIRE(FurthestNeighborSort::SortDistance(list, indices, 0.68) == 2);
-  BOOST_REQUIRE(FurthestNeighborSort::SortDistance(list, indices, 0.62) ==
-      (size_t() - 1));
-}
-
-/**
  * Very simple sanity check to ensure that bounds are working alright.  We will
  * use a one-dimensional bound for simplicity.
  */
@@ -264,14 +199,15 @@ BOOST_AUTO_TEST_CASE(FnsNodeToNodeDistance)
   utility[0] = 0;
 
   arma::mat dataset("1");
-  tree::BinarySpaceTree<HRectBound<2> > nodeOne(dataset);
-  nodeOne.Bound() = HRectBound<2>(1);
+  typedef KDTree<EuclideanDistance, EmptyStatistic, arma::mat> TreeType;
+  TreeType nodeOne(dataset);
+  nodeOne.Bound() = HRectBound<EuclideanDistance>(1);
   nodeOne.Bound() |= utility;
   utility[0] = 1;
   nodeOne.Bound() |= utility;
 
-  tree::BinarySpaceTree<HRectBound<2> > nodeTwo(dataset);
-  nodeTwo.Bound() = HRectBound<2>(1);
+  TreeType nodeTwo(dataset);
+  nodeTwo.Bound() = HRectBound<EuclideanDistance>(1);
   utility[0] = 5;
   nodeTwo.Bound() |= utility;
   utility[0] = 6;
@@ -315,8 +251,9 @@ BOOST_AUTO_TEST_CASE(FnsPointToNodeDistance)
   utility[0] = 0;
 
   arma::mat dataset("1");
-  tree::BinarySpaceTree<HRectBound<2> > node(dataset);
-  node.Bound() = HRectBound<2>(1);
+  typedef KDTree<EuclideanDistance, EmptyStatistic, arma::mat> TreeType;
+  TreeType node(dataset);
+  node.Bound() = HRectBound<EuclideanDistance>(1);
   node.Bound() |= utility;
   utility[0] = 1;
   node.Bound() |= utility;

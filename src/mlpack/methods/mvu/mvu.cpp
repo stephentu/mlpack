@@ -5,6 +5,11 @@
  * Implementation of the MVU class and its auxiliary objective function class.
  *
  * Note: this implementation of MVU does not work.  See #189.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #include "mvu.hpp"
 
@@ -50,13 +55,13 @@ void MVU::Unfold(const size_t newDim,
   mvuSolver.AModes().ones();
   mvuSolver.AModes()[0] = 0;
 
-  // Now all of the other constraints.  We first have to run AllkNN to get the
+  // Now all of the other constraints.  We first have to run KNN to get the
   // list of nearest neighbors.
   arma::Mat<size_t> neighbors;
   arma::mat distances;
 
-  AllkNN allknn(data);
-  allknn.Search(numNeighbors, neighbors, distances);
+  KNN knn(data);
+  knn.Search(numNeighbors, neighbors, distances);
 
   // Add each of the other constraints.  They are sparse constraints:
   //   Tr(A_ij K) = d_ij;

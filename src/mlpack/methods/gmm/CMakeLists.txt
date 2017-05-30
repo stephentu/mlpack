@@ -1,7 +1,8 @@
 # Define the files we need to compile.
-# Anything not in this list will not be compiled into MLPACK.
+# Anything not in this list will not be compiled into mlpack.
 set(SOURCES
   gmm.hpp
+  gmm.cpp
   gmm_impl.hpp
   em_fit.hpp
   em_fit_impl.hpp
@@ -16,26 +17,10 @@ set(DIR_SRCS)
 foreach(file ${SOURCES})
   set(DIR_SRCS ${DIR_SRCS} ${CMAKE_CURRENT_SOURCE_DIR}/${file})
 endforeach()
-# Append sources (with directory name) to list of all MLPACK sources (used at
+# Append sources (with directory name) to list of all mlpack sources (used at
 # the parent scope).
 set(MLPACK_SRCS ${MLPACK_SRCS} ${DIR_SRCS} PARENT_SCOPE)
 
-# main executable, em
-add_executable(gmm
-  gmm_main.cpp
-)
-
-# link dependencies of mog_em
-target_link_libraries(gmm 
-  mlpack
-)
-
-# legacy file converter
-add_executable(gmm_convert
-  gmm_convert_main.cpp
-)
-target_link_libraries(gmm_convert 
-  mlpack
-)
-
-install(TARGETS gmm gmm_convert RUNTIME DESTINATION bin)
+add_cli_executable(gmm_train)
+add_cli_executable(gmm_generate)
+add_cli_executable(gmm_probability)

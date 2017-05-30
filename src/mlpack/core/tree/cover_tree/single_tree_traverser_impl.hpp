@@ -4,9 +4,14 @@
  *
  * Implementation of the single tree traverser for cover trees, which implements
  * a breadth-first traversal.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_TREE_COVER_TREE_SINGLE_TREE_TRAVERSER_IMPL_HPP
-#define __MLPACK_CORE_TREE_COVER_TREE_SINGLE_TREE_TRAVERSER_IMPL_HPP
+#ifndef MLPACK_CORE_TREE_COVER_TREE_SINGLE_TREE_TRAVERSER_IMPL_HPP
+#define MLPACK_CORE_TREE_COVER_TREE_SINGLE_TREE_TRAVERSER_IMPL_HPP
 
 // In case it hasn't been included yet.
 #include "single_tree_traverser.hpp"
@@ -17,11 +22,16 @@ namespace mlpack {
 namespace tree {
 
 //! This is the structure the cover tree map will use for traversal.
-template<typename MetricType, typename RootPointPolicy, typename StatisticType>
+template<
+    typename MetricType,
+    typename StatisticType,
+    typename MatType,
+    typename RootPointPolicy
+>
 struct CoverTreeMapEntry
 {
   //! The node this entry refers to.
-  CoverTree<MetricType, RootPointPolicy, StatisticType>* node;
+  CoverTree<MetricType, StatisticType, MatType, RootPointPolicy>* node;
   //! The score of the node.
   double score;
   //! The index of the parent node.
@@ -36,24 +46,34 @@ struct CoverTreeMapEntry
   }
 };
 
-template<typename MetricType, typename RootPointPolicy, typename StatisticType>
+template<
+    typename MetricType,
+    typename StatisticType,
+    typename MatType,
+    typename RootPointPolicy
+>
 template<typename RuleType>
-CoverTree<MetricType, RootPointPolicy, StatisticType>::
+CoverTree<MetricType, StatisticType, MatType, RootPointPolicy>::
 SingleTreeTraverser<RuleType>::SingleTreeTraverser(RuleType& rule) :
     rule(rule),
     numPrunes(0)
 { /* Nothing to do. */ }
 
-template<typename MetricType, typename RootPointPolicy, typename StatisticType>
+template<
+    typename MetricType,
+    typename StatisticType,
+    typename MatType,
+    typename RootPointPolicy
+>
 template<typename RuleType>
-void CoverTree<MetricType, RootPointPolicy, StatisticType>::
+void CoverTree<MetricType, StatisticType, MatType, RootPointPolicy>::
 SingleTreeTraverser<RuleType>::Traverse(
     const size_t queryIndex,
-    CoverTree<MetricType, RootPointPolicy, StatisticType>& referenceNode)
+    CoverTree& referenceNode)
 {
   // This is a non-recursive implementation (which should be faster than a
   // recursive implementation).
-  typedef CoverTreeMapEntry<MetricType, RootPointPolicy, StatisticType>
+  typedef CoverTreeMapEntry<MetricType, StatisticType, MatType, RootPointPolicy>
       MapEntryType;
 
   // We will use this map as a priority queue.  Each key represents the scale,
@@ -121,7 +141,7 @@ SingleTreeTraverser<RuleType>::Traverse(
       // Get a reference to the current element.
       const MapEntryType& frame = scaleVector.at(i);
 
-      CoverTree<MetricType, RootPointPolicy, StatisticType>* node = frame.node;
+      CoverTree* node = frame.node;
       const double score = frame.score;
       const size_t parent = frame.parent;
       const size_t point = node->Point();
@@ -181,7 +201,7 @@ SingleTreeTraverser<RuleType>::Traverse(
   {
     const MapEntryType& frame = mapQueue[INT_MIN].at(i);
 
-    CoverTree<MetricType, RootPointPolicy, StatisticType>* node = frame.node;
+    CoverTree* node = frame.node;
     const double score = frame.score;
     const size_t point = node->Point();
 
@@ -215,7 +235,7 @@ SingleTreeTraverser<RuleType>::Traverse(
   }
 }
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 #endif

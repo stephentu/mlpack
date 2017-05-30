@@ -4,8 +4,9 @@
 # In this library, these are specified twice, once here, and once for the individual library it belongs to, so make sure
 # that you have files in both sections
 set(SOURCES
-   lcc.hpp
-   lcc_impl.hpp
+  lcc.hpp
+  lcc.cpp
+  lcc_impl.hpp
 )
 
 # add directory name to sources
@@ -14,14 +15,7 @@ foreach(file ${SOURCES})
   set(DIR_SRCS ${DIR_SRCS} ${CMAKE_CURRENT_SOURCE_DIR}/${file})
 endforeach()
 
-# append sources (with directory name) to list of all MLPACK sources (used at the parent scope)
+# append sources (with directory name) to list of all mlpack sources (used at the parent scope)
 set(MLPACK_SRCS ${MLPACK_SRCS} ${DIR_SRCS} PARENT_SCOPE)
 
-add_executable(local_coordinate_coding
-    lcc_main.cpp
-)
-
-target_link_libraries(local_coordinate_coding
-  mlpack
-)
-install(TARGETS local_coordinate_coding RUNTIME DESTINATION bin)
+add_cli_executable(local_coordinate_coding)

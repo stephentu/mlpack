@@ -4,11 +4,16 @@
  *
  * Use the centroids of the K-Means clustering method for use in the Nystroem
  * method of kernel matrix approximation.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_NYSTROEM_METHOD_KMEANS_SELECTION_HPP
-#define __MLPACK_METHODS_NYSTROEM_METHOD_KMEANS_SELECTION_HPP
+#ifndef MLPACK_METHODS_NYSTROEM_METHOD_KMEANS_SELECTION_HPP
+#define MLPACK_METHODS_NYSTROEM_METHOD_KMEANS_SELECTION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/methods/kmeans/kmeans.hpp>
 
 namespace mlpack {
@@ -34,7 +39,7 @@ class KMeansSelection
    */
   const static arma::mat* Select(const arma::mat& data, const size_t m)
   {
-    arma::Col<size_t> assignments;
+    arma::Row<size_t> assignments;
     arma::mat* centroids = new arma::mat;
 
     // Perform the K-Means clustering method.
@@ -45,7 +50,7 @@ class KMeansSelection
   }
 };
 
-}; // namespace kernel
-}; // namespace mlpack
+} // namespace kernel
+} // namespace mlpack
 
 #endif

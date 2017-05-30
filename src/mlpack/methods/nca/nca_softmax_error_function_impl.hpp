@@ -3,9 +3,14 @@
  * @author Ryan Curtin
  *
  * Implementation of the Softmax error function.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_NCA_NCA_SOFTMAX_ERROR_FUNCTCLIN_IMPL_H
-#define __MLPACK_METHODS_NCA_NCA_SOFTMAX_ERROR_FUNCTCLIN_IMPL_H
+#ifndef MLPACK_METHODS_NCA_NCA_SOFTMAX_ERROR_FUNCTCLIN_IMPL_H
+#define MLPACK_METHODS_NCA_NCA_SOFTMAX_ERROR_FUNCTCLIN_IMPL_H
 
 // In case it hasn't been included already.
 #include "nca_softmax_error_function.hpp"
@@ -17,7 +22,7 @@ namespace nca {
 template<typename MetricType>
 SoftmaxErrorFunction<MetricType>::SoftmaxErrorFunction(
     const arma::mat& dataset,
-    const arma::Col<size_t>& labels,
+    const arma::Row<size_t>& labels,
     MetricType metric) :
     dataset(dataset),
     labels(labels),
@@ -59,7 +64,7 @@ double SoftmaxErrorFunction<MetricType>::Evaluate(const arma::mat& coordinates,
     double eval = std::exp(-metric.Evaluate(stretchedDataset.unsafe_col(i),
                                             stretchedDataset.unsafe_col(k)));
 
-    // If they are in the same
+    // If they are in the same class, update the numerator.
     if (labels[i] == labels[k])
       numerator += eval;
 
@@ -267,19 +272,7 @@ void SoftmaxErrorFunction<MetricType>::Precalculate(
   precalculated = true;
 }
 
-template<typename MetricType>
-std::string SoftmaxErrorFunction<MetricType>::ToString() const{
-  std::ostringstream convert;
-  convert << "Sofmax Error Function [" << this << "]" << std::endl;
-  convert << "  Dataset: " << dataset.n_rows << "x" << dataset.n_cols
-      << std::endl;
-  convert << "  Labels: " << labels.n_elem << std::endl;
-  //convert << "Metric: " << metric << std::endl;
-  convert << "  Precalculated: " << precalculated << std::endl;
-  return convert.str();
-}
-
-}; // namespace nca
-}; // namespace mlpack
+} // namespace nca
+} // namespace mlpack
 
 #endif

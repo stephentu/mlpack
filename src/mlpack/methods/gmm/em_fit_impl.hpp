@@ -4,9 +4,14 @@
  * @author Michael Fox
  *
  * Implementation of EM algorithm for fitting GMMs.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_GMM_EM_FIT_IMPL_HPP
-#define __MLPACK_METHODS_GMM_EM_FIT_IMPL_HPP
+#ifndef MLPACK_METHODS_GMM_EM_FIT_IMPL_HPP
+#define MLPACK_METHODS_GMM_EM_FIT_IMPL_HPP
 
 // In case it hasn't been included yet.
 #include "em_fit.hpp"
@@ -93,7 +98,8 @@ void EMFit<InitialClusteringType, CovarianceConstraintPolicy>::Estimate(
           trans(condProb.col(i)));
 
       // Don't update if there's no probability of the Gaussian having points.
-      if (probRowSums[i] != 0.0) {
+      if (probRowSums[i] != 0.0)
+      {
         arma::mat covariance = (tmp * trans(tmpB)) / probRowSums[i];
         // Apply covariance constraint.
         constraint.ApplyConstraint(covariance);
@@ -208,7 +214,7 @@ InitialClustering(const arma::mat& observations,
                   arma::vec& weights)
 {
   // Assignments from clustering.
-  arma::Col<size_t> assignments;
+  arma::Row<size_t> assignments;
 
   // Run clustering algorithm.
   clusterer.Cluster(observations, dists.size(), assignments);
@@ -296,7 +302,21 @@ double EMFit<InitialClusteringType, CovarianceConstraintPolicy>::LogLikelihood(
   return logLikelihood;
 }
 
-}; // namespace gmm
-}; // namespace mlpack
+template<typename InitialClusteringType, typename CovarianceConstraintPolicy>
+template<typename Archive>
+void EMFit<InitialClusteringType, CovarianceConstraintPolicy>::Serialize(
+    Archive& ar,
+    const unsigned int /* version */)
+{
+  using data::CreateNVP;
+
+  ar & CreateNVP(maxIterations, "maxIterations");
+  ar & CreateNVP(tolerance, "tolerance");
+  ar & CreateNVP(clusterer, "clusterer");
+  ar & CreateNVP(constraint, "constraint");
+}
+
+} // namespace gmm
+} // namespace mlpack
 
 #endif

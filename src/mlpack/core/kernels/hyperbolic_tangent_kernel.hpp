@@ -3,11 +3,16 @@
  * @author Ajinkya Kale <kaleajinkya@gmail.com>
  *
  * Implementation of the hyperbolic tangent kernel.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_KERNELS_HYPERBOLIC_TANGENT_KERNEL_HPP
-#define __MLPACK_CORE_KERNELS_HYPERBOLIC_TANGENT_KERNEL_HPP
+#ifndef MLPACK_CORE_KERNELS_HYPERBOLIC_TANGENT_KERNEL_HPP
+#define MLPACK_CORE_KERNELS_HYPERBOLIC_TANGENT_KERNEL_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace kernel {
@@ -44,13 +49,15 @@ class HyperbolicTangentKernel
    * Evaluate the hyperbolic tangent kernel.  This evaluation uses Armadillo's
    * dot() function.
    *
-   * @tparam VecType Type of vector (should be arma::vec or arma::spvec).
+   * @tparam VecTypeA Type of first vector (should be arma::vec or
+   *      arma::sp_vec).
+   * @tparam VecTypeB Type of second vector (arma::vec / arma::sp_vec).
    * @param a First vector.
    * @param b Second vector.
    * @return K(a, b).
    */
-  template<typename VecType>
-  double Evaluate(const VecType& a, const VecType& b)
+  template<typename VecTypeA, typename VecTypeB>
+  double Evaluate(const VecTypeA& a, const VecTypeB& b)
   {
     return tanh(scale * arma::dot(a, b) + offset);
   }
@@ -65,14 +72,12 @@ class HyperbolicTangentKernel
   //! Modify offset for the kernel.
   double& Offset() { return offset; }
 
-  //! Convert object to string.
-  std::string ToString() const
+  //! Serialize the kernel.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */)
   {
-    std::ostringstream convert;
-    convert << "HyperbolicTangentKernel [" << this << "]" << std::endl;
-    convert << "  Scale: " << scale << std::endl;
-    convert << "  Offset: " << offset << std::endl;
-    return convert.str();
+    ar & data::CreateNVP(scale, "scale");
+    ar & data::CreateNVP(offset, "offset");
   }
 
  private:
@@ -80,7 +85,7 @@ class HyperbolicTangentKernel
   double offset;
 };
 
-}; // namespace kernel
-}; // namespace mlpack
+} // namespace kernel
+} // namespace mlpack
 
 #endif

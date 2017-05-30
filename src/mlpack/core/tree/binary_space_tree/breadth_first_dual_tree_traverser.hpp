@@ -6,14 +6,19 @@
  * This is a nested class of BinarySpaceTree which traverses two trees in a
  * breadth-first manner with a given set of rules which indicate the branches
  * which can be pruned and the order in which to recurse.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_TREE_BINARY_SPACE_TREE_BREADTH_FIRST_DUAL_TREE_TRAVERSER_HPP
-#define __MLPACK_CORE_TREE_BINARY_SPACE_TREE_BREADTH_FIRST_DUAL_TREE_TRAVERSER_HPP
+#ifndef MLPACK_CORE_TREE_BINARY_SPACE_TREE_BF_DUAL_TREE_TRAVERSER_HPP
+#define MLPACK_CORE_TREE_BINARY_SPACE_TREE_BF_DUAL_TREE_TRAVERSER_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <queue>
 
-#include "binary_space_tree.hpp"
+#include "../binary_space_tree.hpp"
 
 namespace mlpack {
 namespace tree {
@@ -28,13 +33,15 @@ struct QueueFrame
   TraversalInfoType traversalInfo;
 };
 
-template<typename BoundType,
+template<typename MetricType,
          typename StatisticType,
          typename MatType,
-         typename SplitType>
+         template<typename BoundMetricType, typename...> class BoundType,
+         template<typename SplitBoundType, typename SplitMatType>
+             class SplitType>
 template<typename RuleType>
-class BinarySpaceTree<BoundType, StatisticType, MatType, SplitType>::
-    BreadthFirstDualTreeTraverser
+class BinarySpaceTree<MetricType, StatisticType, MatType, BoundType,
+                      SplitType>::BreadthFirstDualTreeTraverser
 {
  public:
   /**
@@ -98,11 +105,10 @@ class BinarySpaceTree<BoundType, StatisticType, MatType, SplitType>::
   typename RuleType::TraversalInfoType traversalInfo;
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 // Include implementation.
 #include "breadth_first_dual_tree_traverser_impl.hpp"
 
-#endif // __MLPACK_CORE_TREE_BINARY_SPACE_TREE_BREADTH_FIRST_DUAL_TREE_TRAVERSER_HPP
-
+#endif // MLPACK_CORE_TREE_BINARY_SPACE_TREE_BF_DUAL_TREE_TRAVERSER_HPP

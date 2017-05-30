@@ -1,28 +1,35 @@
 /**
-  * @file dual_tree_traverser.hpp
-  * @author Andrew Wells
-  *
-  * A nested class of Rectangle Tree for traversing rectangle type trees
-  * with a given set of rules which indicate the branches to prune and the
-  * order in which to recurse.  This is just here to make it compile.
-  */
-#ifndef __MLPACK_CORE_TREE_RECTANGLE_TREE_DUAL_TREE_TRAVERSER_HPP
-#define __MLPACK_CORE_TREE_RECTANGLE_TREE_DUAL_TREE_TRAVERSER_HPP
+ * @file dual_tree_traverser.hpp
+ * @author Andrew Wells
+ *
+ * A nested class of Rectangle Tree for traversing rectangle type trees
+ * with a given set of rules which indicate the branches to prune and the
+ * order in which to recurse.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
+ */
+#ifndef MLPACK_CORE_TREE_RECTANGLE_TREE_DUAL_TREE_TRAVERSER_HPP
+#define MLPACK_CORE_TREE_RECTANGLE_TREE_DUAL_TREE_TRAVERSER_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 #include "rectangle_tree.hpp"
 
 namespace mlpack {
 namespace tree {
 
-template<typename SplitType,
+template<typename MetricType,
+         typename StatisticType,
+         typename MatType,
+         typename SplitType,
          typename DescentType,
-	 typename StatisticType,
-         typename MatType>
+         template<typename> class AuxiliaryInformationType>
 template<typename RuleType>
-class RectangleTree<SplitType, DescentType, StatisticType, MatType>::
-    DualTreeTraverser
+class RectangleTree<MetricType, StatisticType, MatType, SplitType,
+                    DescentType, AuxiliaryInformationType>::DualTreeTraverser
 {
  public:
   /**
@@ -37,8 +44,7 @@ class RectangleTree<SplitType, DescentType, StatisticType, MatType>::
    * @param referenceNode The reference node to be traversed.
    * @param score The score of the current node combination.
    */
-  void Traverse(RectangleTree<SplitType, DescentType, StatisticType, MatType>& queryNode,
-		RectangleTree<SplitType, DescentType, StatisticType, MatType>& referenceNode);
+  void Traverse(RectangleTree& queryNode, RectangleTree& referenceNode);
 
   //! Get the number of prunes.
   size_t NumPrunes() const { return numPrunes; }
@@ -61,17 +67,17 @@ class RectangleTree<SplitType, DescentType, StatisticType, MatType>::
   size_t& NumBaseCases() { return numBaseCases; }
 
  private:
-
-  //We use this struct and this function to make the sorting and scoring easy and efficient:
-  class NodeAndScore {
-  public:
-    RectangleTree<SplitType, DescentType, StatisticType, MatType>* node;
+  // We use this struct and this function to make the sorting and scoring easy
+  // and efficient:
+  struct NodeAndScore
+  {
+    RectangleTree* node;
     double score;
     typename RuleType::TraversalInfoType travInfo;
   };
 
   static bool nodeComparator(const NodeAndScore& obj1,
-                      const NodeAndScore& obj2)
+                             const NodeAndScore& obj2)
   {
     return obj1.score < obj2.score;
   }
@@ -96,8 +102,8 @@ class RectangleTree<SplitType, DescentType, StatisticType, MatType>::
   typename RuleType::TraversalInfoType traversalInfo;
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 // Include implementation.
 #include "dual_tree_traverser_impl.hpp"

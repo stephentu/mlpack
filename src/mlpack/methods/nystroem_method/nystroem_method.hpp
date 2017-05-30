@@ -6,11 +6,16 @@
  * Implementation of the Nystroem method for approximating a kernel matrix.
  * There are many variations on how to do this, so template parameters allow the
  * selection of many different techniques.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_NYSTROEM_METHOD_NYSTROEM_METHOD_HPP
-#define __MLPACK_METHODS_NYSTROEM_METHOD_NYSTROEM_METHOD_HPP
+#ifndef MLPACK_METHODS_NYSTROEM_METHOD_NYSTROEM_METHOD_HPP
+#define MLPACK_METHODS_NYSTROEM_METHOD_NYSTROEM_METHOD_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include "kmeans_selection.hpp"
 
 namespace mlpack {
@@ -72,8 +77,8 @@ class NystroemMethod
   const size_t rank;
 };
 
-}; // namespace kernel
-}; // namespace mlpack
+} // namespace kernel
+} // namespace mlpack
 
 // Include implementation.
 #include "nystroem_method_impl.hpp"

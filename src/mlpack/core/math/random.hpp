@@ -2,22 +2,33 @@
  * @file random.hpp
  *
  * Miscellaneous math random-related routines.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_MATH_RANDOM_HPP
-#define __MLPACK_CORE_MATH_RANDOM_HPP
+#ifndef MLPACK_CORE_MATH_RANDOM_HPP
+#define MLPACK_CORE_MATH_RANDOM_HPP
 
 #include <mlpack/prereqs.hpp>
+#include <mlpack/mlpack_export.hpp>
 #include <random>
 
 namespace mlpack {
 namespace math /** Miscellaneous math routines. */ {
 
+/**
+ * MLPACK_EXPORT is required for global variables; it exports the symbols
+ * correctly on Windows.
+ */
+
 // Global random object.
-extern std::mt19937 randGen;
+extern MLPACK_EXPORT std::mt19937 randGen;
 // Global uniform distribution.
-extern std::uniform_real_distribution<> randUniformDist;
+extern MLPACK_EXPORT std::uniform_real_distribution<> randUniformDist;
 // Global normal distribution.
-extern std::normal_distribution<> randNormalDist;
+extern MLPACK_EXPORT std::normal_distribution<> randNormalDist;
 
 /**
  * Set the random seed used by the random functions (Random() and RandInt()).
@@ -91,7 +102,45 @@ inline double RandNormal(const double mean, const double variance)
   return variance * randNormalDist(randGen) + mean;
 }
 
-}; // namespace math
-}; // namespace mlpack
+/**
+ * Obtains no more than maxNumSamples distinct samples. Each sample belongs to
+ * [loInclusive, hiExclusive).
+ *
+ * @param loInclusive The lower bound (inclusive).
+ * @param hiExclusive The high bound (exclusive).
+ * @param maxNumSamples The maximum number of samples to obtain.
+ * @param distinctSamples The samples that will be obtained.
+ */
+inline void ObtainDistinctSamples(const size_t loInclusive,
+                                  const size_t hiExclusive,
+                                  const size_t maxNumSamples,
+                                  arma::uvec& distinctSamples)
+{
+  const size_t samplesRangeSize = hiExclusive - loInclusive;
 
-#endif // __MLPACK_CORE_MATH_MATH_LIB_HPP
+  if (samplesRangeSize > maxNumSamples)
+  {
+    arma::Col<size_t> samples;
+
+    samples.zeros(samplesRangeSize);
+
+    for (size_t i = 0; i < maxNumSamples; i++)
+      samples [ (size_t) math::RandInt(samplesRangeSize) ]++;
+
+    distinctSamples = arma::find(samples > 0);
+
+    if (loInclusive > 0)
+      distinctSamples += loInclusive;
+  }
+  else
+  {
+    distinctSamples.set_size(samplesRangeSize);
+    for (size_t i = 0; i < samplesRangeSize; i++)
+      distinctSamples[i] = loInclusive + i;
+  }
+}
+
+} // namespace math
+} // namespace mlpack
+
+#endif // MLPACK_CORE_MATH_MATH_LIB_HPP

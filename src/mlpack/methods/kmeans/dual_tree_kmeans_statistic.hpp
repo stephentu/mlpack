@@ -1,187 +1,120 @@
 /**
- * @file dual_tree_kmeans_statistic.hpp
+ * @file dtnn_statistic.hpp
  * @author Ryan Curtin
  *
- * Statistic for dual-tree k-means traversal.
+ * Statistic for dual-tree nearest neighbor search based k-means clustering.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_KMEANS_DUAL_TREE_KMEANS_STATISTIC_HPP
-#define __MLPACK_METHODS_KMEANS_DUAL_TREE_KMEANS_STATISTIC_HPP
+#ifndef MLPACK_METHODS_KMEANS_DTNN_STATISTIC_HPP
+#define MLPACK_METHODS_KMEANS_DTNN_STATISTIC_HPP
+
+#include <mlpack/methods/neighbor_search/neighbor_search_stat.hpp>
 
 namespace mlpack {
 namespace kmeans {
 
-class DualTreeKMeansStatistic
+class DualTreeKMeansStatistic : public
+    neighbor::NeighborSearchStat<neighbor::NearestNeighborSort>
 {
  public:
-  DualTreeKMeansStatistic() { /* Nothing to do. */ }
+  DualTreeKMeansStatistic() :
+      neighbor::NeighborSearchStat<neighbor::NearestNeighborSort>(),
+      upperBound(DBL_MAX),
+      lowerBound(DBL_MAX),
+      owner(size_t(-1)),
+      pruned(size_t(-1)),
+      staticPruned(false),
+      staticUpperBoundMovement(0.0),
+      staticLowerBoundMovement(0.0),
+      centroid(),
+      trueParent(NULL)
+  {
+    // Nothing to do.
+  }
 
   template<typename TreeType>
   DualTreeKMeansStatistic(TreeType& node) :
-//      closestQueryNode(NULL),
-//      secondClosestQueryNode(NULL),
-      minQueryNodeDistance(DBL_MAX),
-      maxQueryNodeDistance(DBL_MAX),
-      secondMinQueryNodeDistance(DBL_MAX),
-      secondMaxQueryNodeDistance(DBL_MAX),
-      lastSecondClosestBound(DBL_MAX),
-      hamerlyPruned(false),
-      clustersPruned(size_t(-1)),
-      iteration(size_t() - 1),
+      neighbor::NeighborSearchStat<neighbor::NearestNeighborSort>(),
+      upperBound(DBL_MAX),
+      lowerBound(DBL_MAX),
       owner(size_t(-1)),
-      firstBound(DBL_MAX),
-      secondBound(DBL_MAX),
-      bound(DBL_MAX),
-      lastDistanceNode(NULL),
-      lastDistance(0.0)
+      pruned(size_t(-1)),
+      staticPruned(false),
+      staticUpperBoundMovement(0.0),
+      staticLowerBoundMovement(0.0),
+      trueParent(node.Parent())
   {
     // Empirically calculate the centroid.
     centroid.zeros(node.Dataset().n_rows);
     for (size_t i = 0; i < node.NumPoints(); ++i)
+    {
+      // Correct handling of cover tree: don't double-count the point which
+      // appears in the children.
+      if (tree::TreeTraits<TreeType>::HasSelfChildren && i == 0 &&
+          node.NumChildren() > 0)
+        continue;
       centroid += node.Dataset().col(node.Point(i));
+    }
 
     for (size_t i = 0; i < node.NumChildren(); ++i)
       centroid += node.Child(i).NumDescendants() *
           node.Child(i).Stat().Centroid();
 
     centroid /= node.NumDescendants();
+
+    // Set the true children correctly.
+    trueChildren.resize(node.NumChildren());
+    for (size_t i = 0; i < node.NumChildren(); ++i)
+      trueChildren[i] = &node.Child(i);
   }
 
-  //! Return the centroid.
+  double UpperBound() const { return upperBound; }
+  double& UpperBound() { return upperBound; }
+
+  double LowerBound() const { return lowerBound; }
+  double& LowerBound() { return lowerBound; }
+
   const arma::vec& Centroid() const { return centroid; }
-  //! Modify the centroid.
   arma::vec& Centroid() { return centroid; }
 
-  //! Get the current closest query node.
-//  void* ClosestQueryNode() const { return closestQueryNode; }
-  //! Modify the current closest query node.
-//  void*& ClosestQueryNode() { return closestQueryNode; }
-
-  //! Get the second closest query node.
-//  void* SecondClosestQueryNode() const { return secondClosestQueryNode; }
-  //! Modify the second closest query node.
-//  void*& SecondClosestQueryNode() { return secondClosestQueryNode; }
-
-  //! Get the minimum distance to the closest query node.
-  double MinQueryNodeDistance() const { return minQueryNodeDistance; }
-  //! Modify the minimum distance to the closest query node.
-  double& MinQueryNodeDistance() { return minQueryNodeDistance; }
-
-  //! Get the maximum distance to the closest query node.
-  double MaxQueryNodeDistance() const { return maxQueryNodeDistance; }
-  //! Modify the maximum distance to the closest query node.
-  double& MaxQueryNodeDistance() { return maxQueryNodeDistance; }
-
-  //! Get the minimum distance to the second closest query node.
-  double SecondMinQueryNodeDistance() const
-  { return secondMinQueryNodeDistance; }
-  //! Modify the minimum distance to the second closest query node.
-  double& SecondMinQueryNodeDistance() { return secondMinQueryNodeDistance; }
-
-  //! Get the maximum distance to the second closest query node.
-  double SecondMaxQueryNodeDistance() const
-  { return secondMaxQueryNodeDistance; }
-  //! Modify the maximum distance to the second closest query node.
-  double& SecondMaxQueryNodeDistance() { return secondMaxQueryNodeDistance; }
-
-  //! Get last iteration's second closest bound.
-  double LastSecondClosestBound() const { return lastSecondClosestBound; }
-  //! Modify last iteration's second closest bound.
-  double& LastSecondClosestBound() { return lastSecondClosestBound; }
-
-  //! Get whether or not this node is Hamerly pruned this iteration.
-  bool HamerlyPruned() const { return hamerlyPruned; }
-  //! Modify whether or not this node is Hamerly pruned this iteration.
-  bool& HamerlyPruned() { return hamerlyPruned; }
-
-  //! Get the number of clusters that have been pruned during this iteration.
-  size_t ClustersPruned() const { return clustersPruned; }
-  //! Modify the number of clusters that have been pruned during this iteration.
-  size_t& ClustersPruned() { return clustersPruned; }
-
-  //! Get the current iteration.
-  size_t Iteration() const { return iteration; }
-  //! Modify the current iteration.
-  size_t& Iteration() { return iteration; }
-
-  //! Get the current owner (if any) of these reference points.
   size_t Owner() const { return owner; }
-  //! Modify the current owner (if any) of these reference points.
   size_t& Owner() { return owner; }
 
-  // For nearest neighbor search.
+  size_t Pruned() const { return pruned; }
+  size_t& Pruned() { return pruned; }
 
-  //! Get the first bound.
-  double FirstBound() const { return firstBound; }
-  //! Modify the first bound.
-  double& FirstBound() { return firstBound; }
-  //! Get the second bound.
-  double SecondBound() const { return secondBound; }
-  //! Modify the second bound.
-  double& SecondBound() { return secondBound; }
-  //! Get the overall bound.
-  double Bound() const { return bound; }
-  //! Modify the overall bound.
-  double& Bound() { return bound; }
-  //! Get the last distance evaluation node.
-  void* LastDistanceNode() const { return lastDistanceNode; }
-  //! Modify the last distance evaluation node.
-  void*& LastDistanceNode() { return lastDistanceNode; }
-  //! Get the last distance calculation.
-  double LastDistance() const { return lastDistance; }
-  //! Modify the last distance calculation.
-  double& LastDistance() { return lastDistance; }
+  bool StaticPruned() const { return staticPruned; }
+  bool& StaticPruned() { return staticPruned; }
 
-  std::string ToString() const
-  {
-    std::ostringstream convert;
-    convert << "DualTreeKMeansStatistic [" << this << "]" << std::endl;
-    convert << "  minQueryNodeDistance: " << minQueryNodeDistance << ".\n";
-    convert << "  maxQueryNodeDistance: " << maxQueryNodeDistance << ".\n";
-    convert << "  secondMinQueryNodeDistance: " << secondMinQueryNodeDistance << ".\n";
-    convert << "  secondMaxQueryNodeDistance: " << secondMaxQueryNodeDistance << ".\n";
-    convert << "  hamerlyPruned: " << hamerlyPruned << ".\n";
-    convert << "  lastSecondClosestBound: " << lastSecondClosestBound << ".\n";
-    convert << "  clustersPruned: " << clustersPruned << ".\n";
-    return convert.str();
-  }
+  double StaticUpperBoundMovement() const { return staticUpperBoundMovement; }
+  double& StaticUpperBoundMovement() { return staticUpperBoundMovement; }
+
+  double StaticLowerBoundMovement() const { return staticLowerBoundMovement; }
+  double& StaticLowerBoundMovement() { return staticLowerBoundMovement; }
+
+  void* TrueParent() const { return trueParent; }
+  void*& TrueParent() { return trueParent; }
+
+  void* TrueChild(const size_t i) const { return trueChildren[i]; }
+  void*& TrueChild(const size_t i) { return trueChildren[i]; }
+
+  size_t NumTrueChildren() const { return trueChildren.size(); }
 
  private:
-  //! The empirically calculated centroid of the node.
-  arma::vec centroid;
-
-  //! The current closest query node to this reference node.
-//  void* closestQueryNode;
-  //! The second closest query node.
-//  void* secondClosestQueryNode;
-  //! The minimum distance to the closest query node.
-  double minQueryNodeDistance;
-  //! The maximum distance to the closest query node.
-  double maxQueryNodeDistance;
-  //! The minimum distance to the second closest query node.
-  double secondMinQueryNodeDistance;
-  //! The maximum distance to the second closest query node.
-  double secondMaxQueryNodeDistance;
-
-  //! The second closest lower bound, on the previous iteration.
-  double lastSecondClosestBound;
-  //! Whether or not this node is pruned for the next iteration.
-  bool hamerlyPruned;
-
-  //! The number of clusters that have been pruned.
-  size_t clustersPruned;
-  //! The current iteration.
-  size_t iteration;
-  //! The owner of these reference nodes (centroids.n_cols if there is no
-  //! owner).
+  double upperBound;
+  double lowerBound;
   size_t owner;
-
-  // For nearest neighbor search.
-
-  double firstBound;
-  double secondBound;
-  double bound;
-  void* lastDistanceNode;
-  double lastDistance;
+  size_t pruned;
+  bool staticPruned;
+  double staticUpperBoundMovement;
+  double staticLowerBoundMovement;
+  arma::vec centroid;
+  void* trueParent;
+  std::vector<void*> trueChildren;
 };
 
 } // namespace kmeans

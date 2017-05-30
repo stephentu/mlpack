@@ -3,11 +3,18 @@
  * @author Ryan Curtin
  *
  * Main executable for logistic regression.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
+#include <mlpack/core/util/cli.hpp>
 #include "logistic_regression.hpp"
 
 #include <mlpack/core/optimizers/sgd/sgd.hpp>
+#include <mlpack/core/optimizers/minibatch_sgd/minibatch_sgd.hpp>
 
 using namespace std;
 using namespace mlpack;
@@ -17,104 +24,129 @@ using namespace mlpack::optimization;
 PROGRAM_INFO("L2-regularized Logistic Regression and Prediction",
     "An implementation of L2-regularized logistic regression using either the "
     "L-BFGS optimizer or SGD (stochastic gradient descent).  This solves the "
-    "regression problem\n"
-    "\n"
-    "  y = (1 / 1 + e^-(X * b))\n"
-    "\n"
-    "where y takes values 0 or 1.  Training the model is done by giving labeled"
-    " data and iteratively training the parameters vector b.  The matrix of "
-    "predictors (or features) X is specified with the --input_file option, and "
-    "the vector of responses y is either the last column of the matrix given "
-    "with --input_file, or a separate one-column vector given with the "
-    "--input_responses option.  After training, the calculated b is saved to "
-    "the file specified by --output_file.  An initial guess for b can be "
-    "specified when the --model_file parameter is given with --input_file or "
-    "--input_responses.  The tolerance of the optimizer can be set with "
-    "--tolerance; the maximum number of iterations of the optimizer can be set "
-    "with --max_iterations; and the type of the optimizer (SGD / L-BFGS) can be"
-    " set with " "the --optimizer option.  Both the SGD and L-BFGS optimizers "
-    "have more options, but the C++ interface must be used for those.  For the "
-    "SGD optimizer, the --step_size parameter controls the step size taken at "
-    "each iteration by the optimizer.  If the objective function for your data "
-    "is oscillating between Inf and 0, the step size is probably too large.\n"
-    "\n"
-    "This implementation of logistic regression supports L2-regularization, "
-    "which can help the parameter vector b from overfitting.  This parameter "
-    "is specified with the --lambda option; by default, it is 0 (which means "
-    "no regularization is performed).\n"
-    "\n"
-    "Optionally, the calculated value of b is used to predict the responses "
-    "for another matrix of data points, if --test_file is specified.  The "
-    "--test_file option can be specified without --input_file, so long as an "
-    "existing logistic regression model is given with --model_file.  The "
-    "output predictions from the logistic regression model are stored in the "
-    "file given with --output_predictions.\n"
-    "\n"
+    "regression problem"
+    "\n\n"
+    "  y = (1 / 1 + e^-(X * b))"
+    "\n\n"
+    "where y takes values 0 or 1."
+    "\n\n"
+    "This program allows loading a logistic regression model from a file (-i) "
+    "or training a logistic regression model given training data (-t), or both "
+    "those things at once.  In addition, this program allows classification on "
+    "a test dataset (-T) and will save the classification results to the given "
+    "output file (-o).  The logistic regression model itself may be saved with "
+    "a file specified using the -m option."
+    "\n\n"
+    "The training data given with the -t option should have class labels as its"
+    " last dimension (so, if the training data is in CSV format, labels should "
+    "be the last column).  Alternately, the -l (--labels_file) option may be "
+    "used to specify a separate file of labels."
+    "\n\n"
+    "When a model is being trained, there are many options.  L2 regularization "
+    "(to prevent overfitting) can be specified with the -l option, and the "
+    "optimizer used to train the model can be specified with the --optimizer "
+    "option.  Available options are 'sgd' (stochastic gradient descent), "
+    "'lbfgs' (the L-BFGS optimizer), and 'minibatch-sgd' (minibatch stochastic "
+    "gradient descent).  There are also various parameters for the optimizer; "
+    "the --max_iterations parameter specifies the maximum number of allowed "
+     "iterations, and the --tolerance (-e) parameter specifies the tolerance "
+    "for convergence.  For the SGD and mini-batch SGD optimizers, the "
+    "--step_size parameter controls the step size taken at each iteration by "
+    "the optimizer.  The batch size for mini-batch SGD is controlled with the "
+    "--batch_size (-b) parameter.  If the objective function for your data is "
+    "oscillating between Inf and 0, the step size is probably too large.  There"
+    " are more parameters for the optimizers, but the C++ interface must be "
+    "used to access these."
+    "\n\n"
+    "For SGD, an iteration refers to a single point, and for mini-batch SGD, an"
+    " iteration refers to a single batch.  So to take a single pass over the "
+    "dataset with SGD, --max_iterations should be set to the number of points "
+    "in the dataset."
+    "\n\n"
+    "Optionally, the model can be used to predict the responses for another "
+    "matrix of data points, if --test_file is specified.  The --test_file "
+    "option can be specified without --input_file, so long as an existing "
+    "logistic regression model is given with --model_file.  The output "
+    "predictions from the logistic regression model are stored in the file "
+    "given with --output_predictions."
+    "\n\n"
     "This implementation of logistic regression does not support the general "
     "multi-class case but instead only the two-class case.  Any responses must "
     "be either 0 or 1.");
 
-PARAM_STRING("input_file", "File containing X (predictors).", "i", "");
-PARAM_STRING("input_responses", "Optional file containing y (responses).  If "
-    "not given, the responses are assumed to be the last column of the input "
-    "file.", "r", "");
+// Training parameters.
+PARAM_MATRIX_IN("training", "A matrix containing the training set (the matrix "
+    "of predictors, X).", "t");
+PARAM_UROW_IN("labels", "A matrix containing labels (0 or 1) for the points "
+    "in the training set (y).", "l");
 
-PARAM_STRING("model_file", "File containing existing model (parameters).", "m",
-    "");
+// Optimizer parameters.
+PARAM_DOUBLE_IN("lambda", "L2-regularization parameter for training.", "L",
+    0.0);
+PARAM_STRING_IN("optimizer", "Optimizer to use for training ('lbfgs' or "
+    "'sgd').", "O", "lbfgs");
+PARAM_DOUBLE_IN("tolerance", "Convergence tolerance for optimizer.", "e",
+    1e-10);
+PARAM_INT_IN("max_iterations", "Maximum iterations for optimizer (0 indicates "
+    "no limit).", "n", 10000);
+PARAM_DOUBLE_IN("step_size", "Step size for SGD and mini-batch SGD optimizers.",
+    "s", 0.01);
+PARAM_INT_IN("batch_size", "Batch size for mini-batch SGD.", "b", 50);
 
-PARAM_STRING("output_file", "File where parameters (b) will be saved.", "o",
-    "");
+// Model loading/saving.
+PARAM_MODEL_IN(LogisticRegression<>, "input_model", "Existing model "
+    "(parameters).", "m");
+PARAM_MODEL_OUT(LogisticRegression<>, "output_model", "Output for trained "
+    "logistic regression model.", "M");
 
-PARAM_STRING("test_file", "File containing test dataset.", "t", "");
-PARAM_STRING("output_predictions", "If --test_file is specified, this file is "
-    "where the predicted responses will be saved.", "p", "predictions.csv");
-PARAM_DOUBLE("decision_boundary", "Decision boundary for prediction; if the "
+// Testing.
+PARAM_MATRIX_IN("test", "Matrix containing test dataset.", "T");
+PARAM_UROW_OUT("output", "If --test_file is specified, this matrix is where "
+    "the predictions for the test set will be saved.", "o");
+PARAM_MATRIX_OUT("output_probabilities", "If --test_file is specified, this "
+    "matrix is where the class probabilities for the test set will be saved.",
+    "p");
+PARAM_DOUBLE_IN("decision_boundary", "Decision boundary for prediction; if the "
     "logistic function for a point is less than the boundary, the class is "
     "taken to be 0; otherwise, the class is 1.", "d", 0.5);
-
-PARAM_DOUBLE("lambda", "L2-regularization parameter for training.", "l", 0.0);
-PARAM_STRING("optimizer", "Optimizer to use for training ('lbfgs' or 'sgd').",
-    "O", "lbfgs");
-PARAM_DOUBLE("tolerance", "Convergence tolerance for optimizer.", "T", 1e-10);
-PARAM_INT("max_iterations", "Maximum iterations for optimizer (0 indicates no "
-    "limit).", "M", 0);
-PARAM_DOUBLE("step_size", "Step size for SGD optimizer.", "s", 0.01);
 
 int main(int argc, char** argv)
 {
   CLI::ParseCommandLine(argc, argv);
 
   // Collect command-line options.
-  const string inputFile = CLI::GetParam<string>("input_file");
-  const string inputResponsesFile = CLI::GetParam<string>("input_responses");
-  const string modelFile = CLI::GetParam<string>("model_file");
-  const string outputFile = CLI::GetParam<string>("output_file");
-  const string testFile = CLI::GetParam<string>("test_file");
-  const string outputPredictionsFile =
-      CLI::GetParam<string>("output_predictions");
   const double lambda = CLI::GetParam<double>("lambda");
   const string optimizerType = CLI::GetParam<string>("optimizer");
   const double tolerance = CLI::GetParam<double>("tolerance");
+  const double stepSize = CLI::GetParam<double>("step_size");
+  const size_t batchSize = (size_t) CLI::GetParam<int>("batch_size");
   const size_t maxIterations = (size_t) CLI::GetParam<int>("max_iterations");
   const double decisionBoundary = CLI::GetParam<double>("decision_boundary");
-  const double stepSize = CLI::GetParam<double>("step_size");
 
   // One of inputFile and modelFile must be specified.
-  if (inputFile.empty() && modelFile.empty())
-    Log::Fatal << "One of --model_file or --input_file must be specified."
-        << endl;
-
-  // If they want predictions, they should supply a file to save them to.  This
-  // is only a warning because the program can still work.
-  if (!testFile.empty() && outputPredictionsFile.empty())
-    Log::Warn << "--output_predictions not specified; predictions will not be "
-        << "saved." << endl;
+  if (!CLI::HasParam("training") && !CLI::HasParam("input_model"))
+    Log::Fatal << "One of --input_model_file or --training_file must be "
+        << "specified." << endl;
 
   // If no output file is given, the user should know that the model will not be
   // saved, but only if a model is being trained.
-  if (outputFile.empty() && !inputFile.empty())
-    Log::Warn << "--output_file not given; trained model will not be saved."
+  if (!CLI::HasParam("output_model") && CLI::HasParam("training"))
+    Log::Warn << "--output_model_file not given; trained model will not be "
+        << "saved." << endl;
+
+  if (CLI::HasParam("test") && !CLI::HasParam("output") &&
+      !CLI::HasParam("output_probabilities"))
+    Log::Warn << "--test_file specified, but neither --output_file nor "
+        << "--output_probabilities_file are specified; no test "
+        << "output will be saved!" << endl;
+
+  if (CLI::HasParam("output") && !CLI::HasParam("test"))
+    Log::Warn << "--output_file ignored because --test_file is not specified."
         << endl;
+
+  if (CLI::HasParam("output_probabilities") && !CLI::HasParam("test"))
+    Log::Warn << "--output_probabilities_file ignored because --test_file is "
+        << "not specified." << endl;
 
   // Tolerance needs to be positive.
   if (tolerance < 0.0)
@@ -122,8 +154,10 @@ int main(int argc, char** argv)
         << endl;
 
   // Optimizer has to be L-BFGS or SGD.
-  if (optimizerType != "lbfgs" && optimizerType != "sgd")
-    Log::Fatal << "--optimizer must be 'lbfgs' or 'sgd'." << endl;
+  if (optimizerType != "lbfgs" && optimizerType != "sgd" &&
+      optimizerType != "minibatch-sgd")
+    Log::Fatal << "--optimizer must be 'lbfgs', 'sgd', or 'minibatch-sgd'."
+        << endl;
 
   // Lambda must be positive.
   if (lambda < 0.0)
@@ -135,113 +169,136 @@ int main(int argc, char** argv)
     Log::Fatal << "Decision boundary (--decision_boundary) must be between 0.0 "
         << "and 1.0 (received " << decisionBoundary << ")." << endl;
 
-  if ((stepSize < 0.0) && (optimizerType == "sgd"))
+  if ((stepSize < 0.0) &&
+      (optimizerType == "sgd" || optimizerType == "minibatch-sgd"))
     Log::Fatal << "Step size (--step_size) must be positive (received "
         << stepSize << ")." << endl;
 
+  if (CLI::HasParam("step_size") && optimizerType == "lbfgs")
+    Log::Warn << "Step size (--step_size) ignored because 'sgd' optimizer is "
+        << "not being used." << endl;
+
+  if (CLI::HasParam("batch_size") && optimizerType != "minibatch-sgd")
+    Log::Warn << "Batch size (--batch_size) ignored because 'minibatch-sgd' "
+        << "optimizer is not being used." << endl;
+
   // These are the matrices we might use.
   arma::mat regressors;
-  arma::mat responses;
-  arma::mat model;
+  arma::Row<size_t> responses;
   arma::mat testSet;
-  arma::vec predictions;
+  arma::Row<size_t> predictions;
 
-  // Load matrices.
-  if (!inputFile.empty())
-    data::Load(inputFile, regressors, true);
+  // Load data matrix.
+  if (CLI::HasParam("training"))
+    regressors = std::move(CLI::GetParam<arma::mat>("training"));
 
-  // Check if the responses are in a separate file.
-  if (!inputResponsesFile.empty())
-  {
-    data::Load(inputResponsesFile, responses, true);
-    if (responses.n_rows == 1)
-      responses = responses.t();
-    if (responses.n_rows != regressors.n_cols)
-      Log::Fatal << "The responses (--input_responses) must have the same "
-          << "number of points as the input dataset (--input_file)." << endl;
-  }
+  // Load the model, if necessary.
+  LogisticRegression<> model(0, 0); // Empty model.
+  if (CLI::HasParam("input_model"))
+    model = std::move(CLI::GetParam<LogisticRegression<>>("input_model"));
   else
   {
+    // Set the size of the parameters vector, if necessary.
+    if (!CLI::HasParam("labels"))
+      model.Parameters() = arma::zeros<arma::vec>(regressors.n_rows - 1);
+    else
+      model.Parameters() = arma::zeros<arma::vec>(regressors.n_rows);
+  }
+
+  // Check if the responses are in a separate file.
+  if (CLI::HasParam("training") && CLI::HasParam("labels"))
+  {
+    responses = std::move(CLI::GetParam<arma::Row<size_t>>("labels"));
+    if (responses.n_cols != regressors.n_cols)
+      Log::Fatal << "The labels (--labels_file) must have the same number of "
+          << "points as the training dataset (--training_file)." << endl;
+  }
+  else if (CLI::HasParam("training"))
+  {
     // The initial predictors for y, Nx1.
-    responses = trans(regressors.row(regressors.n_rows - 1));
+    responses = arma::conv_to<arma::Row<size_t>>::from(
+        regressors.row(regressors.n_rows - 1));
     regressors.shed_row(regressors.n_rows - 1);
   }
 
-  if (!testFile.empty())
-    data::Load(testFile, testSet, true);
-  if (!modelFile.empty())
+  // Verify the labels.
+  if (CLI::HasParam("training") && max(responses) > 1)
+    Log::Fatal << "The labels must be either 0 or 1, not " << max(responses)
+        << "!" << endl;
+
+  // Now, do the training.
+  if (CLI::HasParam("training"))
   {
-    data::Load(modelFile, model, true);
-    if (model.n_rows == 1)
-      model = model.t();
-    if ((!regressors.empty()) && (model.n_rows != regressors.n_rows + 1))
-      Log::Fatal << "The model (--model) must have dimensionality of one more "
-          << "than the input dataset (the extra dimension is the intercept)."
-          << endl;
-    if ((!testSet.empty()) && (model.n_rows != testSet.n_rows + 1))
-      Log::Fatal << "The model (--model) must have dimensionality of one more "
-          << "than the test dataset (the extra dimension is the intercept)."
-          << endl;
-  }
-
-  if (!regressors.empty())
-  {
-    // We need to train the model.  Prepare the optimizers.
-    arma::vec responsesVec = responses.unsafe_col(0);
-    LogisticRegressionFunction lrf(regressors, responsesVec, lambda);
-    // Set the initial point, if necessary.
-    if (!model.empty())
+    LogisticRegressionFunction<> lrf(regressors, responses, model.Parameters());
+    if (optimizerType == "sgd")
     {
-      lrf.InitialPoint() = model;
-      Log::Info << "Using model from '" << modelFile << "' as initial model "
-          << "for training." << endl;
-    }
-
-    if (optimizerType == "lbfgs")
-    {
-      L_BFGS<LogisticRegressionFunction> lbfgsOpt(lrf);
-      lbfgsOpt.MaxIterations() = maxIterations;
-      lbfgsOpt.MinGradientNorm() = tolerance;
-      Log::Info << "Training model with L-BFGS optimizer." << endl;
-
-      // This will train the model.
-      LogisticRegression<L_BFGS> lr(lbfgsOpt);
-      // Extract the newly trained model.
-      model = lr.Parameters();
-    }
-    else if (optimizerType == "sgd")
-    {
-      SGD<LogisticRegressionFunction> sgdOpt(lrf);
+      SGD<LogisticRegressionFunction<>> sgdOpt(lrf);
       sgdOpt.MaxIterations() = maxIterations;
       sgdOpt.Tolerance() = tolerance;
       sgdOpt.StepSize() = stepSize;
       Log::Info << "Training model with SGD optimizer." << endl;
 
       // This will train the model.
-      LogisticRegression<SGD> lr(sgdOpt);
-      // Extract the newly trained model.
-      model = lr.Parameters();
+      model.Train(sgdOpt);
+    }
+    else if (optimizerType == "lbfgs")
+    {
+      L_BFGS<LogisticRegressionFunction<>> lbfgsOpt(lrf);
+      lbfgsOpt.MaxIterations() = maxIterations;
+      lbfgsOpt.MinGradientNorm() = tolerance;
+      Log::Info << "Training model with L-BFGS optimizer." << endl;
+
+      // This will train the model.
+      model.Train(lbfgsOpt);
+    }
+    else if (optimizerType == "minibatch-sgd")
+    {
+      MiniBatchSGD<LogisticRegressionFunction<>> mbsgdOpt(lrf);
+      mbsgdOpt.BatchSize() = batchSize;
+      mbsgdOpt.Tolerance() = tolerance;
+      mbsgdOpt.StepSize() = stepSize;
+      mbsgdOpt.MaxIterations() = maxIterations;
+      Log::Info << "Training model with mini-batch SGD optimizer (batch size "
+          << batchSize << ")." << endl;
+
+      model.Train(mbsgdOpt);
     }
   }
 
-  if (!testSet.empty())
+  if (CLI::HasParam("test"))
   {
+    testSet = std::move(CLI::GetParam<arma::mat>("test"));
+
     // We must perform predictions on the test set.  Training (and the
     // optimizer) are irrelevant here; we'll pass in the model we have.
-    LogisticRegression<> lr(model);
+    if (CLI::HasParam("output"))
+    {
+      Log::Info << "Predicting classes of points in '"
+          << CLI::GetUnmappedParam<arma::mat>("test") << "'." << endl;
+      model.Classify(testSet, predictions, decisionBoundary);
 
-    Log::Info << "Predicting classes of points in '" << testFile << "'."
-        << endl;
-    lr.Predict(testSet, predictions, decisionBoundary);
+      CLI::GetParam<arma::Row<size_t>>("output") = std::move(predictions);
+    }
 
-    // Save the results, if necessary.  Don't transpose.
-    if (!outputPredictionsFile.empty())
-      data::Save(outputPredictionsFile, predictions, false, false);
+    if (CLI::HasParam("output_probabilities"))
+    {
+      Log::Info << "Calculating class probabilities of points in '"
+          << CLI::GetUnmappedParam<arma::mat>("test") << "'." << endl;
+      arma::mat probabilities;
+      model.Classify(testSet, probabilities);
+
+      CLI::GetParam<arma::mat>("output_probabilities") =
+          std::move(probabilities);
+    }
   }
 
-  if (!outputFile.empty())
+  if (CLI::HasParam("output_model"))
   {
-    Log::Info << "Saving model to '" << outputFile << "'." << endl;
-    data::Save(outputFile, model, false);
+    Log::Info << "Saving model to '"
+        << CLI::GetUnmappedParam<LogisticRegression<>>("output_model") << "'."
+        << endl;
+    CLI::GetParam<LogisticRegression<>>("output_model") = std::move(model);
   }
+
+  CLI::Destroy();
 }

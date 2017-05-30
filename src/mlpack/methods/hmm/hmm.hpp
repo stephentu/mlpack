@@ -5,11 +5,17 @@
  * @author Michael Fox
  *
  * Definition of HMM class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_HMM_HMM_HPP
-#define __MLPACK_METHODS_HMM_HMM_HPP
+#ifndef MLPACK_METHODS_HMM_HMM_HPP
+#define MLPACK_METHODS_HMM_HMM_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
+#include <mlpack/core/dists/discrete_distribution.hpp>
 
 namespace mlpack {
 namespace hmm /** Hidden Markov Models. */ {
@@ -35,12 +41,12 @@ namespace hmm /** Hidden Markov Models. */ {
  *   double Probability(const DataType& observation) const;
  *
  *   // Estimate the distribution based on the given observations.
- *   void Estimate(const std::vector<DataType>& observations);
+ *   void Train(const std::vector<DataType>& observations);
  *
  *   // Estimate the distribution based on the given observations, given also
  *   // the probability of each observation coming from this distribution.
- *   void Estimate(const std::vector<DataType>& observations,
- *                 const std::vector<double>& probabilities);
+ *   void Train(const std::vector<DataType>& observations,
+ *              const std::vector<double>& probabilities);
  * };
  * @endcode
  *
@@ -58,7 +64,7 @@ namespace hmm /** Hidden Markov Models. */ {
  *
  * @code
  * extern arma::mat observations; // Each column is an observation.
- * extern arma::Col<size_t> states; // Hidden states for each observation.
+ * extern arma::Row<size_t> states; // Hidden states for each observation.
  * // Create an untrained HMM with 5 hidden states and default (N(0, 1))
  * // Gaussian distributions with the dimensionality of the dataset.
  * HMM<GaussianDistribution> hmm(5, GaussianDistribution(observations.n_rows));
@@ -71,7 +77,7 @@ namespace hmm /** Hidden Markov Models. */ {
  * Once initialized, the HMM can evaluate the probability of a certain sequence
  * (with LogLikelihood()), predict the most likely sequence of hidden states
  * (with Predict()), generate a sequence (with Generate()), or estimate the
- * probabilities of each state for a sequence of observations (with Estimate()).
+ * probabilities of each state for a sequence of observations (with Train()).
  *
  * @tparam Distribution Type of emission distribution for this HMM.
  */
@@ -96,8 +102,8 @@ class HMM
    * @param tolerance Tolerance for convergence of training algorithm
    *      (Baum-Welch).
    */
-  HMM(const size_t states,
-      const Distribution emissions,
+  HMM(const size_t states = 0,
+      const Distribution emissions = Distribution(),
       const double tolerance = 1e-5);
 
   /**
@@ -184,7 +190,7 @@ class HMM
    *     observation.
    */
   void Train(const std::vector<arma::mat>& dataSeq,
-             const std::vector<arma::Col<size_t> >& stateSeq);
+             const std::vector<arma::Row<size_t> >& stateSeq);
 
   /**
    * Estimate the probabilities of each hidden state at each time step for each
@@ -237,7 +243,7 @@ class HMM
    */
   void Generate(const size_t length,
                 arma::mat& dataSequence,
-                arma::Col<size_t>& stateSequence,
+                arma::Row<size_t>& stateSequence,
                 const size_t startState = 0) const;
 
   /**
@@ -251,7 +257,7 @@ class HMM
    * @return Log-likelihood of most probable state sequence.
    */
   double Predict(const arma::mat& dataSeq,
-                 arma::Col<size_t>& stateSeq) const;
+                 arma::Row<size_t>& stateSeq) const;
 
   /**
    * Compute the log-likelihood of the given data sequence.
@@ -317,19 +323,10 @@ class HMM
   double& Tolerance() { return tolerance; }
 
   /**
-   * Returns a string representation of this object.
+   * Serialize the object.
    */
-  std::string ToString() const;
-
-  //! Save to SaveRestoreUtility
-  void Save(util::SaveRestoreUtility& sr) const;
-  //! Load from SaveRestoreUtility
-  void Load(const util::SaveRestoreUtility& sr);
-
-  /**
-   * Returns a string indicating the type.
-   */
-  static std::string const Type() { return "HMM"; }
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int version);
 
  protected:
   // Helper functions.
@@ -379,8 +376,8 @@ class HMM
   double tolerance;
 };
 
-}; // namespace hmm
-}; // namespace mlpack
+} // namespace hmm
+} // namespace mlpack
 
 // Include implementation.
 #include "hmm_impl.hpp"

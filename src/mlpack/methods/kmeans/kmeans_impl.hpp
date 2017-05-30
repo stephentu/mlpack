@@ -4,13 +4,79 @@
  * @author Ryan Curtin
  *
  * Implementation for the K-means method for getting an initial point.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
 #include "kmeans.hpp"
 
 #include <mlpack/core/metrics/lmetric.hpp>
+#include <mlpack/core/util/sfinae_utility.hpp>
 
 namespace mlpack {
 namespace kmeans {
+
+/**
+ * This gives us a GivesCentroids object that we can use to tell whether or not
+ * an InitialPartitionPolicy returns centroids or point assignments.
+ */
+HAS_MEM_FUNC(Cluster, GivesCentroidsCheck);
+
+/**
+ * 'value' is true if the InitialPartitionPolicy class has a member
+ * Cluster(const arma::mat& data, const size_t clusters, arma::mat& centroids).
+ */
+template<typename InitialPartitionPolicy>
+struct GivesCentroids
+{
+  static const bool value =
+    // Non-static version.
+    GivesCentroidsCheck<InitialPartitionPolicy,
+        void(InitialPartitionPolicy::*)(const arma::mat&,
+                                        const size_t,
+                                        arma::mat&)>::value ||
+    // Static version.
+    GivesCentroidsCheck<InitialPartitionPolicy,
+        void(*)(const arma::mat&, const size_t, arma::mat&)>::value;
+};
+
+//! Call the initial partition policy, if it returns assignments.  This returns
+//! 'true' to indicate that assignments were given.
+template<typename MatType,
+         typename InitialPartitionPolicy>
+bool GetInitialAssignmentsOrCentroids(
+    InitialPartitionPolicy& ipp,
+    const MatType& data,
+    const size_t clusters,
+    arma::Row<size_t>& assignments,
+    arma::mat& /* centroids */,
+    const typename std::enable_if_t<
+        !GivesCentroids<InitialPartitionPolicy>::value>* = 0)
+{
+  ipp.Cluster(data, clusters, assignments);
+
+  return true;
+}
+
+//! Call the initial partition policy, if it returns centroids.  This returns
+//! 'false' to indicate that assignments were not given.
+template<typename MatType,
+         typename InitialPartitionPolicy>
+bool GetInitialAssignmentsOrCentroids(
+    InitialPartitionPolicy& ipp,
+    const MatType& data,
+    const size_t clusters,
+    arma::Row<size_t>& /* assignments */,
+    arma::mat& centroids,
+    const typename std::enable_if_t<
+        GivesCentroids<InitialPartitionPolicy>::value>* = 0)
+{
+  ipp.Cluster(data, clusters, centroids);
+
+  return false;
+}
 
 /**
  * Construct the K-Means object.
@@ -57,7 +123,7 @@ inline void KMeans<
     MatType>::
 Cluster(const MatType& data,
         const size_t clusters,
-        arma::Col<size_t>& assignments,
+        arma::Row<size_t>& assignments,
         const bool initialGuess)
 {
   arma::mat centroids(data.n_rows, clusters);
@@ -110,25 +176,30 @@ Cluster(const MatType& data,
   // the initial centroids.
   if (!initialGuess)
   {
-    // The partitioner gives assignments, so we need to calculate centroids from
-    // those assignments.  This is probably not the most efficient way to do
-    // this, so maybe refactoring should be considered in the future.
-    arma::Col<size_t> assignments;
-    partitioner.Cluster(data, clusters, assignments);
-
-    // Calculate initial centroids.
-    arma::Col<size_t> counts;
-    counts.zeros(clusters);
-    centroids.zeros(data.n_rows, clusters);
-    for (size_t i = 0; i < data.n_cols; ++i)
+    // The GetInitialAssignmentsOrCentroids() function will call the appropriate
+    // function in the InitialPartitionPolicy to return either assignments or
+    // centroids.  We prefer centroids, but if assignments are returned, then we
+    // have to calculate the initial centroids for the first iteration.
+    arma::Row<size_t> assignments;
+    bool gotAssignments = GetInitialAssignmentsOrCentroids(partitioner, data,
+        clusters, assignments, centroids);
+    if (gotAssignments)
     {
-      centroids.col(assignments[i]) += arma::vec(data.col(i));
-      counts[assignments[i]]++;
-    }
+      // The partitioner gives assignments, so we need to calculate centroids
+      // from those assignments.
+      arma::Row<size_t> counts;
+      counts.zeros(clusters);
+      centroids.zeros(data.n_rows, clusters);
+      for (size_t i = 0; i < data.n_cols; ++i)
+      {
+        centroids.col(assignments[i]) += arma::vec(data.col(i));
+        counts[assignments[i]]++;
+      }
 
-    for (size_t i = 0; i < clusters; ++i)
-      if (counts[i] != 0)
-        centroids.col(i) /= counts[i];
+      for (size_t i = 0; i < clusters; ++i)
+        if (counts[i] != 0)
+          centroids.col(i) /= counts[i];
+    }
   }
 
   // Counts of points in each cluster.
@@ -157,16 +228,19 @@ Cluster(const MatType& data,
       {
         Log::Info << "Cluster " << i << " is empty.\n";
         if (iteration % 2 == 0)
-          emptyClusterAction.EmptyCluster(data, i, centroidsOther, counts,
-              metric);
+          emptyClusterAction.EmptyCluster(data, i, centroids, centroidsOther,
+              counts, metric, iteration);
         else
-          emptyClusterAction.EmptyCluster(data, i, centroids, counts, metric);
+          emptyClusterAction.EmptyCluster(data, i, centroidsOther, centroids,
+              counts, metric, iteration);
       }
     }
 
     iteration++;
     Log::Info << "KMeans::Cluster(): iteration " << iteration << ", residual "
         << cNorm << ".\n";
+    if (std::isnan(cNorm) || std::isinf(cNorm))
+      cNorm = 1e-4; // Keep iterating.
 
   } while (cNorm > 1e-5 && iteration != maxIterations);
 
@@ -207,7 +281,7 @@ void KMeans<
     MatType>::
 Cluster(const MatType& data,
         const size_t clusters,
-        arma::Col<size_t>& assignments,
+        arma::Row<size_t>& assignments,
         arma::mat& centroids,
         const bool initialAssignmentGuess,
         const bool initialCentroidGuess)
@@ -221,7 +295,7 @@ Cluster(const MatType& data,
           << data.n_cols << ")!" << std::endl;
 
     // Calculate initial centroids.
-    arma::Col<size_t> counts;
+    arma::Row<size_t> counts;
     counts.zeros(clusters);
     centroids.zeros(data.n_rows, clusters);
     for (size_t i = 0; i < data.n_cols; ++i)
@@ -267,20 +341,18 @@ template<typename MetricType,
          typename EmptyClusterPolicy,
          template<class, class> class LloydStepType,
          typename MatType>
-std::string KMeans<MetricType,
-    InitialPartitionPolicy,
-    EmptyClusterPolicy,
-    LloydStepType,
-    MatType>::ToString() const
+template<typename Archive>
+void KMeans<MetricType,
+            InitialPartitionPolicy,
+            EmptyClusterPolicy,
+            LloydStepType,
+            MatType>::Serialize(Archive& ar, const unsigned int /* version */)
 {
-  std::ostringstream convert;
-  convert << "KMeans [" << this << "]" << std::endl;
-  convert << "  Max Iterations: " << maxIterations << std::endl;
-  convert << "  Metric: " << std::endl;
-  convert << mlpack::util::Indent(metric.ToString(), 2);
-  convert << std::endl;
-  return convert.str();
+  ar & data::CreateNVP(maxIterations, "max_iterations");
+  ar & data::CreateNVP(metric, "metric");
+  ar & data::CreateNVP(partitioner, "partitioner");
+  ar & data::CreateNVP(emptyClusterAction, "emptyClusterAction");
 }
 
-}; // namespace kmeans
-}; // namespace mlpack
+} // namespace kmeans
+} // namespace mlpack

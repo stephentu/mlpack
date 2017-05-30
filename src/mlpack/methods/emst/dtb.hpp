@@ -16,14 +16,19 @@
  *   year = {2010}
  * }
  * @endcode
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_EMST_DTB_HPP
-#define __MLPACK_METHODS_EMST_DTB_HPP
+#ifndef MLPACK_METHODS_EMST_DTB_HPP
+#define MLPACK_METHODS_EMST_DTB_HPP
 
 #include "dtb_stat.hpp"
 #include "edge_pair.hpp"
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/core/metrics/lmetric.hpp>
 
 #include <mlpack/core/tree/binary_space_tree.hpp>
@@ -63,26 +68,31 @@ namespace emst /** Euclidean Minimum Spanning Trees. */ {
  * More advanced usage of the class can use different types of trees, pass in an
  * already-built tree, or compute the MST using the O(n^2) naive algorithm.
  *
- * @tparam MetricType The metric to use.  IMPORTANT: this hasn't really been
- * tested with anything other than the L2 metric, so user beware. Note that the
- * tree type needs to compute bounds using the same metric as the type
- * specified here.
- * @tparam TreeType Type of tree to use.  Should use DTBStat as a statistic.
+ * @tparam MetricType The metric to use.
+ * @tparam MatType The type of data matrix to use.
+ * @tparam TreeType Type of tree to use.  This should follow the TreeType policy
+ *      API.
  */
 template<
-  typename MetricType = metric::EuclideanDistance,
-  typename TreeType = tree::BinarySpaceTree<bound::HRectBound<2>, DTBStat>
+    typename MetricType = metric::EuclideanDistance,
+    typename MatType = arma::mat,
+    template<typename TreeMetricType,
+             typename TreeStatType,
+             typename TreeMatType> class TreeType = tree::KDTree
 >
 class DualTreeBoruvka
 {
- private:
-  //! Copy of the data (if necessary).
-  typename TreeType::Mat dataCopy;
-  //! Reference to the data (this is what should be used for accessing data).
-  const typename TreeType::Mat& data;
+ public:
+  //! Convenience typedef.
+  typedef TreeType<MetricType, DTBStat, MatType> Tree;
 
+ private:
+  //! Permutations of points during tree building.
+  std::vector<size_t> oldFromNew;
   //! Pointer to the root of the tree.
-  TreeType* tree;
+  Tree* tree;
+  //! Reference to the data (this is what should be used for accessing data).
+  const MatType& data;
   //! Indicates whether or not we "own" the tree.
   bool ownTree;
 
@@ -95,8 +105,6 @@ class DualTreeBoruvka
   //! Connections.
   UnionFind connections;
 
-  //! Permutations of points during tree building.
-  std::vector<size_t> oldFromNew;
   //! List of edge nodes.
   arma::Col<size_t> neighborsInComponent;
   //! List of edge nodes.
@@ -126,9 +134,9 @@ class DualTreeBoruvka
    *
    * @param data Dataset to build a tree for.
    * @param naive Whether the computation should be done in O(n^2) naive mode.
-   * @param leafSize The leaf size to be used during tree construction.
+   * @param metric An optional instantiated metric to use.
    */
-  DualTreeBoruvka(const typename TreeType::Mat& dataset,
+  DualTreeBoruvka(const MatType& dataset,
                   const bool naive = false,
                   const MetricType metric = MetricType());
 
@@ -147,10 +155,9 @@ class DualTreeBoruvka
    * @endnote
    *
    * @param tree Pre-built tree.
-   * @param dataset Dataset corresponding to the pre-built tree.
+   * @param metric An optional instantiated metric to use.
    */
-  DualTreeBoruvka(TreeType* tree,
-                  const typename TreeType::Mat& dataset,
+  DualTreeBoruvka(Tree* tree,
                   const MetricType metric = MetricType());
 
   /**
@@ -168,11 +175,6 @@ class DualTreeBoruvka
    * @param results Matrix which results will be stored in.
    */
   void ComputeMST(arma::mat& results);
-
-  /**
-   * Returns a string representation of this object.
-   */
-  std::string ToString() const;
 
  private:
   /**
@@ -194,7 +196,7 @@ class DualTreeBoruvka
    * This function resets the values in the nodes of the tree nearest neighbor
    * distance, and checks for fully connected nodes.
    */
-  void CleanupHelper(TreeType* tree);
+  void CleanupHelper(Tree* tree);
 
   /**
    * The values stored in the tree must be reset on each iteration.
@@ -203,9 +205,9 @@ class DualTreeBoruvka
 
 }; // class DualTreeBoruvka
 
-}; // namespace emst
-}; // namespace mlpack
+} // namespace emst
+} // namespace mlpack
 
 #include "dtb_impl.hpp"
 
-#endif // __MLPACK_METHODS_EMST_DTB_HPP
+#endif // MLPACK_METHODS_EMST_DTB_HPP

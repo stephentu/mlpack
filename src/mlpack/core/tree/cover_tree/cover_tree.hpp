@@ -3,14 +3,20 @@
  * @author Ryan Curtin
  *
  * Definition of CoverTree, which can be used in place of the BinarySpaceTree.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_TREE_COVER_TREE_COVER_TREE_HPP
-#define __MLPACK_CORE_TREE_COVER_TREE_COVER_TREE_HPP
+#ifndef MLPACK_CORE_TREE_COVER_TREE_COVER_TREE_HPP
+#define MLPACK_CORE_TREE_COVER_TREE_COVER_TREE_HPP
 
-#include <mlpack/core.hpp>
-#include <mlpack/core/metrics/lmetric.hpp>
-#include "first_point_is_root.hpp"
+#include <mlpack/prereqs.hpp>
+#include <mlpack/core/math/range.hpp>
+
 #include "../statistic.hpp"
+#include "first_point_is_root.hpp"
 
 namespace mlpack {
 namespace tree {
@@ -23,14 +29,16 @@ namespace tree {
  *
  * The tree can be thought of as a hierarchy with the root node at the top level
  * and the leaf nodes at the bottom level.  Each level in the tree has an
- * assigned 'scale' i.  The tree follows these three conditions:
+ * assigned 'scale' i.  The tree follows these two invariants:
  *
  * - nesting: the level C_i is a subset of the level C_{i - 1}.
  * - covering: all node in level C_{i - 1} have at least one node in the
  *     level C_i with distance less than or equal to b^i (exactly one of these
  *     is a parent of the point in level C_{i - 1}.
- * - separation: all nodes in level C_i have distance greater than b^i to all
- *     other nodes in level C_i.
+ *
+ * Note that in the cover tree paper, there is a third invariant (the
+ * 'separation invariant'), but that does not apply to our implementation,
+ * because we have relaxed the invariant.
  *
  * The value 'b' refers to the base, which is a parameter of the tree.  These
  * three properties make the cover tree very good for fast, high-dimensional
@@ -81,14 +89,20 @@ namespace tree {
  * @tparam MetricType Metric type to use during tree construction.
  * @tparam RootPointPolicy Determines which point to use as the root node.
  * @tparam StatisticType Statistic to be used during tree creation.
+ * @tparam MatType Type of matrix to build the tree on (generally mat or
+ *      sp_mat).
  */
 template<typename MetricType = metric::LMetric<2, true>,
-         typename RootPointPolicy = FirstPointIsRoot,
-         typename StatisticType = EmptyStatistic>
+         typename StatisticType = EmptyStatistic,
+         typename MatType = arma::mat,
+         typename RootPointPolicy = FirstPointIsRoot>
 class CoverTree
 {
  public:
-  typedef arma::mat Mat;
+  //! So that other classes can access the matrix type.
+  typedef MatType Mat;
+  //! The type held by the matrix type.
+  typedef typename MatType::elem_type ElemType;
 
   /**
    * Create the cover tree with the given dataset and given base.
@@ -100,8 +114,8 @@ class CoverTree
    * @param dataset Reference to the dataset to build a tree on.
    * @param base Base to use during tree building (default 2.0).
    */
-  CoverTree(const arma::mat& dataset,
-            const double base = 2.0,
+  CoverTree(const MatType& dataset,
+            const ElemType base = 2.0,
             MetricType* metric = NULL);
 
   /**
@@ -113,9 +127,31 @@ class CoverTree
    * @param metric Instantiated metric to use during tree building.
    * @param base Base to use during tree building (default 2.0).
    */
-  CoverTree(const arma::mat& dataset,
+  CoverTree(const MatType& dataset,
             MetricType& metric,
-            const double base = 2.0);
+            const ElemType base = 2.0);
+
+  /**
+   * Create the cover tree with the given dataset, taking ownership of the
+   * dataset.  Optionally, set the base.
+   *
+   * @param dataset Reference to the dataset to build a tree on.
+   * @param base Base to use during tree building (default 2.0).
+   */
+  CoverTree(MatType&& dataset,
+            const ElemType base = 2.0);
+
+  /**
+   * Create the cover tree with the given dataset and the given instantiated
+   * metric, taking ownership of the dataset.  Optionally, set the base.
+   *
+   * @param dataset Reference to the dataset to build a tree on.
+   * @param metric Instantiated metric to use during tree building.
+   * @param base Base to use during tree building (default 2.0).
+   */
+  CoverTree(MatType&& dataset,
+            MetricType& metric,
+            const ElemType base = 2.0);
 
   /**
    * Construct a child cover tree node.  This constructor is not meant to be
@@ -148,12 +184,12 @@ class CoverTree
    *     any points in the far set).
    * @param usedSetSize The number of points used will be added to this number.
    */
-  CoverTree(const arma::mat& dataset,
-            const double base,
+  CoverTree(const MatType& dataset,
+            const ElemType base,
             const size_t pointIndex,
             const int scale,
             CoverTree* parent,
-            const double parentDistance,
+            const ElemType parentDistance,
             arma::Col<size_t>& indices,
             arma::vec& distances,
             size_t nearSetSize,
@@ -177,22 +213,38 @@ class CoverTree
    * @param furthestDescendantDistance Distance to furthest descendant point.
    * @param metric Instantiated metric (optional).
    */
-  CoverTree(const arma::mat& dataset,
-            const double base,
+  CoverTree(const MatType& dataset,
+            const ElemType base,
             const size_t pointIndex,
             const int scale,
             CoverTree* parent,
-            const double parentDistance,
-            const double furthestDescendantDistance,
+            const ElemType parentDistance,
+            const ElemType furthestDescendantDistance,
             MetricType* metric = NULL);
 
   /**
    * Create a cover tree from another tree.  Be careful!  This may use a lot of
-   * memory and take a lot of time.
+   * memory and take a lot of time.  This will also make a copy of the dataset.
    *
    * @param other Cover tree to copy from.
    */
   CoverTree(const CoverTree& other);
+
+  /**
+   * Move constructor for a Cover Tree, possess all the members of the given
+   * tree.
+   *
+   * @param other Cover Tree to move.
+   */
+  CoverTree(CoverTree&& other);
+
+  /**
+   * Create a cover tree from a boost::serialization archive.
+   */
+  template<typename Archive>
+  CoverTree(
+      Archive& ar,
+      const typename std::enable_if_t<Archive::is_loading::value>* = 0);
 
   /**
    * Delete this cover tree node and its children.
@@ -212,7 +264,7 @@ class CoverTree
   using BreadthFirstDualTreeTraverser = DualTreeTraverser<RuleType>;
 
   //! Get a reference to the dataset.
-  const arma::mat& Dataset() const { return dataset; }
+  const MatType& Dataset() const { return *dataset; }
 
   //! Get the index of the point which this node represents.
   size_t Point() const { return point; }
@@ -249,61 +301,88 @@ class CoverTree
   int& Scale() { return scale; }
 
   //! Get the base.
-  double Base() const { return base; }
+  ElemType Base() const { return base; }
   //! Modify the base; don't do this, you'll break everything.
-  double& Base() { return base; }
+  ElemType& Base() { return base; }
 
   //! Get the statistic for this node.
   const StatisticType& Stat() const { return stat; }
   //! Modify the statistic for this node.
   StatisticType& Stat() { return stat; }
 
+  /**
+   * Return the index of the nearest child node to the given query point.  If
+   * this is a leaf node, it will return NumChildren() (invalid index).
+   */
+  template<typename VecType>
+  size_t GetNearestChild(
+      const VecType& point,
+      typename std::enable_if_t<IsVector<VecType>::value>* = 0);
+
+  /**
+   * Return the index of the furthest child node to the given query point.  If
+   * this is a leaf node, it will return NumChildren() (invalid index).
+   */
+  template<typename VecType>
+  size_t GetFurthestChild(
+      const VecType& point,
+      typename std::enable_if_t<IsVector<VecType>::value>* = 0);
+
+  /**
+   * Return the index of the nearest child node to the given query node.  If it
+   * can't decide, it will return NumChildren() (invalid index).
+   */
+  size_t GetNearestChild(const CoverTree& queryNode);
+
+  /**
+   * Return the index of the furthest child node to the given query node.  If it
+   * can't decide, it will return NumChildren() (invalid index).
+   */
+  size_t GetFurthestChild(const CoverTree& queryNode);
+
   //! Return the minimum distance to another node.
-  double MinDistance(const CoverTree* other) const;
+  ElemType MinDistance(const CoverTree& other) const;
 
   //! Return the minimum distance to another node given that the point-to-point
   //! distance has already been calculated.
-  double MinDistance(const CoverTree* other, const double distance) const;
+  ElemType MinDistance(const CoverTree& other, const ElemType distance) const;
 
   //! Return the minimum distance to another point.
-  double MinDistance(const arma::vec& other) const;
+  ElemType MinDistance(const arma::vec& other) const;
 
   //! Return the minimum distance to another point given that the distance from
   //! the center to the point has already been calculated.
-  double MinDistance(const arma::vec& other, const double distance) const;
+  ElemType MinDistance(const arma::vec& other, const ElemType distance) const;
 
   //! Return the maximum distance to another node.
-  double MaxDistance(const CoverTree* other) const;
+  ElemType MaxDistance(const CoverTree& other) const;
 
   //! Return the maximum distance to another node given that the point-to-point
   //! distance has already been calculated.
-  double MaxDistance(const CoverTree* other, const double distance) const;
+  ElemType MaxDistance(const CoverTree& other, const ElemType distance) const;
 
   //! Return the maximum distance to another point.
-  double MaxDistance(const arma::vec& other) const;
+  ElemType MaxDistance(const arma::vec& other) const;
 
   //! Return the maximum distance to another point given that the distance from
   //! the center to the point has already been calculated.
-  double MaxDistance(const arma::vec& other, const double distance) const;
+  ElemType MaxDistance(const arma::vec& other, const ElemType distance) const;
 
   //! Return the minimum and maximum distance to another node.
-  math::Range RangeDistance(const CoverTree* other) const;
+  math::RangeType<ElemType> RangeDistance(const CoverTree& other) const;
 
   //! Return the minimum and maximum distance to another node given that the
   //! point-to-point distance has already been calculated.
-  math::Range RangeDistance(const CoverTree* other, const double distance)
-      const;
+  math::RangeType<ElemType> RangeDistance(const CoverTree& other,
+                                          const ElemType distance) const;
 
   //! Return the minimum and maximum distance to another point.
-  math::Range RangeDistance(const arma::vec& other) const;
+  math::RangeType<ElemType> RangeDistance(const arma::vec& other) const;
 
   //! Return the minimum and maximum distance to another point given that the
   //! point-to-point distance has already been calculated.
-  math::Range RangeDistance(const arma::vec& other, const double distance)
-      const;
-
-  //! Returns true: this tree does have self-children.
-  static bool HasSelfChildren() { return true; }
+  math::RangeType<ElemType> RangeDistance(const arma::vec& other,
+                                          const ElemType distance) const;
 
   //! Get the parent node.
   CoverTree* Parent() const { return parent; }
@@ -311,64 +390,58 @@ class CoverTree
   CoverTree*& Parent() { return parent; }
 
   //! Get the distance to the parent.
-  double ParentDistance() const { return parentDistance; }
+  ElemType ParentDistance() const { return parentDistance; }
   //! Modify the distance to the parent.
-  double& ParentDistance() { return parentDistance; }
+  ElemType& ParentDistance() { return parentDistance; }
 
   //! Get the distance to the furthest point.  This is always 0 for cover trees.
-  double FurthestPointDistance() const { return 0.0; }
+  ElemType FurthestPointDistance() const { return 0.0; }
 
   //! Get the distance from the center of the node to the furthest descendant.
-  double FurthestDescendantDistance() const
+  ElemType FurthestDescendantDistance() const
   { return furthestDescendantDistance; }
   //! Modify the distance from the center of the node to the furthest
   //! descendant.
-  double& FurthestDescendantDistance() { return furthestDescendantDistance; }
+  ElemType& FurthestDescendantDistance() { return furthestDescendantDistance; }
 
   //! Get the minimum distance from the center to any bound edge (this is the
   //! same as furthestDescendantDistance).
-  double MinimumBoundDistance() const { return furthestDescendantDistance; }
+  ElemType MinimumBoundDistance() const { return furthestDescendantDistance; }
 
-  //! Get the centroid of the node and store it in the given vector.
-  void Centroid(arma::vec& centroid) const { centroid = dataset.col(point); }
+  //! Get the center of the node and store it in the given vector.
+  void Center(arma::vec& center) const
+  {
+    center = arma::vec(dataset->col(point));
+  }
 
   //! Get the instantiated metric.
   MetricType& Metric() const { return *metric; }
 
  private:
   //! Reference to the matrix which this tree is built on.
-  const arma::mat& dataset;
-
+  const MatType* dataset;
   //! Index of the point in the matrix which this node represents.
   size_t point;
-
   //! The list of children; the first is the self-child.
   std::vector<CoverTree*> children;
-
   //! Scale level of the node.
   int scale;
-
   //! The base used to construct the tree.
-  double base;
-
+  ElemType base;
   //! The instantiated statistic.
   StatisticType stat;
-
   //! The number of descendant points.
   size_t numDescendants;
-
   //! The parent node (NULL if this is the root of the tree).
   CoverTree* parent;
-
   //! Distance to the parent.
-  double parentDistance;
-
+  ElemType parentDistance;
   //! Distance to the furthest descendant.
-  double furthestDescendantDistance;
-
+  ElemType furthestDescendantDistance;
   //! Whether or not we need to destroy the metric in the destructor.
   bool localMetric;
-
+  //! If true, we own the dataset and need to destroy it in the destructor.
+  bool localDataset;
   //! The metric used for this tree.
   MetricType* metric;
 
@@ -412,7 +485,7 @@ class CoverTree
    */
   size_t SplitNearFar(arma::Col<size_t>& indices,
                       arma::vec& distances,
-                      const double bound,
+                      const ElemType bound,
                       const size_t pointSetSize);
 
   /**
@@ -450,7 +523,7 @@ class CoverTree
                      const size_t childUsedSetSize);
   size_t PruneFarSet(arma::Col<size_t>& indices,
                      arma::vec& distances,
-                     const double bound,
+                     const ElemType bound,
                      const size_t nearSetSize,
                      const size_t pointSetSize);
 
@@ -460,11 +533,24 @@ class CoverTree
    */
   void RemoveNewImplicitNodes();
 
+ protected:
+  /**
+   * A default constructor.  This is meant to only be used with
+   * boost::serialization, which is allowed with the friend declaration below.
+   * This does not return a valid tree!  This method must be protected, so that
+   * the serialization shim can work with the default constructor.
+   */
+  CoverTree();
+
+  //! Friend access is given for the default constructor.
+  friend class boost::serialization::access;
+
  public:
   /**
-   * Returns a string representation of this object.
+   * Serialize the tree.
    */
-  std::string ToString() const;
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int /* version */);
 
   size_t DistanceComps() const { return distanceComps; }
   size_t& DistanceComps() { return distanceComps; }
@@ -473,10 +559,13 @@ class CoverTree
   size_t distanceComps;
 };
 
-}; // namespace tree
-}; // namespace mlpack
+} // namespace tree
+} // namespace mlpack
 
 // Include implementation.
 #include "cover_tree_impl.hpp"
+
+// Include the rest of the pieces, if necessary.
+#include "../cover_tree.hpp"
 
 #endif

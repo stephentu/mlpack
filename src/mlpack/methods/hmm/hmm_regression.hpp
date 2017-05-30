@@ -3,11 +3,16 @@
  * @author Michael Fox
  *
  * Definition of HMMRegression class.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_HMM_HMM_REGRESSION_HPP
-#define __MLPACK_METHODS_HMM_HMM_REGRESSION_HPP
+#ifndef MLPACK_METHODS_HMM_HMM_REGRESSION_HPP
+#define MLPACK_METHODS_HMM_HMM_REGRESSION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/core/dists/regression_distribution.hpp>
 #include "hmm.hpp"
 
@@ -174,7 +179,7 @@ class HMMRegression : public HMM<distribution::RegressionDistribution>
    */
   void Train(const std::vector<arma::mat>& predictors,
              const std::vector<arma::vec>& responses,
-             const std::vector<arma::Col<size_t> >& stateSeq);
+             const std::vector<arma::Row<size_t> >& stateSeq);
 
   /**
    * Estimate the probabilities of each hidden state at each time step for each
@@ -231,7 +236,7 @@ class HMMRegression : public HMM<distribution::RegressionDistribution>
    */
   double Predict(const arma::mat& predictors,
                  const arma::vec& responses,
-                 arma::Col<size_t>& stateSeq) const;
+                 arma::Row<size_t>& stateSeq) const;
 
   /**
    * Compute the log-likelihood of the given predictors and responses.
@@ -326,8 +331,8 @@ class HMMRegression : public HMM<distribution::RegressionDistribution>
 
 };
 
-}; // namespace hmm
-}; // namespace mlpack
+} // namespace hmm
+} // namespace mlpack
 
 // Include implementation.
 #include "hmm_regression_impl.hpp"

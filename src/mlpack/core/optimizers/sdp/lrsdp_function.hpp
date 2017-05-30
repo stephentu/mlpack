@@ -4,11 +4,16 @@
  * @author Abhishek Laddha
  *
  * A class that represents the objective function which LRSDP optimizes.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_FUNCTION_HPP
-#define __MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_FUNCTION_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_FUNCTION_HPP
+#define MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_FUNCTION_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 #include <mlpack/core/optimizers/aug_lagrangian/aug_lagrangian.hpp>
 #include <mlpack/core/optimizers/sdp/sdp.hpp>
 
@@ -22,7 +27,6 @@ template <typename SDPType>
 class LRSDPFunction
 {
  public:
-
   /**
    * Construct the LRSDPFunction from the given SDP.
    *
@@ -84,11 +88,7 @@ class LRSDPFunction
   //! Modify the SDP object representing the problem.
   SDPType& SDP() { return sdp; }
 
-  //! Return string representation of object.
-  std::string ToString() const;
-
  private:
-
   //! SDP object representing the problem
   SDPType sdp;
 
@@ -115,10 +115,10 @@ inline void AugLagrangianFunction<LRSDPFunction<SDP<arma::mat>>>::Gradient(
     const arma::mat& coordinates,
     arma::mat& gradient) const;
 
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack
 
 // Include implementation
 #include "lrsdp_function_impl.hpp"
 
-#endif // __MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_FUNCTION_HPP
+#endif // MLPACK_CORE_OPTIMIZERS_SDP_LRSDP_FUNCTION_HPP

@@ -3,9 +3,14 @@
  * @author Zhihao Lou
  *
  * Exponential (geometric) cooling schedule used in SA.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_OPTIMIZERS_SA_EXPONENTIAL_SCHEDULE_HPP
-#define __MLPACK_CORE_OPTIMIZERS_SA_EXPONENTIAL_SCHEDULE_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_SA_EXPONENTIAL_SCHEDULE_HPP
+#define MLPACK_CORE_OPTIMIZERS_SA_EXPONENTIAL_SCHEDULE_HPP
 
 namespace mlpack {
 namespace optimization {
@@ -58,7 +63,7 @@ class ExponentialSchedule
   double lambda;
 };
 
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack
 
 #endif

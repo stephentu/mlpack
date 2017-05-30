@@ -1,44 +1,59 @@
 /**
  * @file sgd_impl.hpp
  * @author Ryan Curtin
+ * @author Arun Reddy
+ * @author Abhinav Moudgil
  *
  * Implementation of stochastic gradient descent.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_OPTIMIZERS_SGD_SGD_IMPL_HPP
-#define __MLPACK_CORE_OPTIMIZERS_SGD_SGD_IMPL_HPP
+#ifndef MLPACK_CORE_OPTIMIZERS_SGD_SGD_IMPL_HPP
+#define MLPACK_CORE_OPTIMIZERS_SGD_SGD_IMPL_HPP
 
 #include <mlpack/methods/regularized_svd/regularized_svd_function.hpp>
+#include <mlpack/core/optimizers/sgd/update_policies/vanilla_update.hpp>
+
 // In case it hasn't been included yet.
 #include "sgd.hpp"
 
 namespace mlpack {
 namespace optimization {
 
-template<typename DecomposableFunctionType>
-SGD<DecomposableFunctionType>::SGD(DecomposableFunctionType& function,
-                                   const double stepSize,
-                                   const size_t maxIterations,
-                                   const double tolerance,
-                                   const bool shuffle) :
+template<typename DecomposableFunctionType, typename UpdatePolicyType>
+SGD<DecomposableFunctionType, UpdatePolicyType>::SGD(
+    DecomposableFunctionType& function,
+    const double stepSize,
+    const size_t maxIterations,
+    const double tolerance,
+    const bool shuffle,
+    const UpdatePolicyType updatePolicy) :
     function(function),
     stepSize(stepSize),
     maxIterations(maxIterations),
     tolerance(tolerance),
-    shuffle(shuffle)
+    shuffle(shuffle),
+    updatePolicy(updatePolicy)
 { /* Nothing to do. */ }
 
 //! Optimize the function (minimize).
-template<typename DecomposableFunctionType>
-double SGD<DecomposableFunctionType>::Optimize(arma::mat& iterate)
+template<typename DecomposableFunctionType, typename UpdatePolicyType>
+double SGD<DecomposableFunctionType, UpdatePolicyType>::Optimize(
+    arma::mat& iterate)
 {
   // Find the number of functions to use.
   const size_t numFunctions = function.NumFunctions();
 
   // This is used only if shuffle is true.
-  arma::vec visitationOrder;
+  arma::Col<size_t> visitationOrder;
   if (shuffle)
-    visitationOrder = arma::shuffle(arma::linspace(0, (numFunctions - 1),
-        numFunctions));
+  {
+    visitationOrder = arma::shuffle(arma::linspace<arma::Col<size_t>>(0,
+        (numFunctions - 1), numFunctions));
+  }
 
   // To keep track of where we are and how things are going.
   size_t currentFunction = 0;
@@ -48,6 +63,9 @@ double SGD<DecomposableFunctionType>::Optimize(arma::mat& iterate)
   // Calculate the first objective function.
   for (size_t i = 0; i < numFunctions; ++i)
     overallObjective += function.Evaluate(iterate, i);
+
+  // Initialize the update policy.
+  updatePolicy.Initialize(iterate.n_rows, iterate.n_cols);
 
   // Now iterate!
   arma::mat gradient(iterate.n_rows, iterate.n_cols);
@@ -60,7 +78,7 @@ double SGD<DecomposableFunctionType>::Optimize(arma::mat& iterate)
       Log::Info << "SGD: iteration " << i << ", objective " << overallObjective
           << "." << std::endl;
 
-      if (overallObjective != overallObjective)
+      if (std::isnan(overallObjective) || std::isinf(overallObjective))
       {
         Log::Warn << "SGD: converged to " << overallObjective << "; terminating"
             << " with failure.  Try a smaller step size?" << std::endl;
@@ -89,19 +107,24 @@ double SGD<DecomposableFunctionType>::Optimize(arma::mat& iterate)
     else
       function.Gradient(iterate, currentFunction, gradient);
 
-    // And update the iterate.
-    iterate -= stepSize * gradient;
+    // Use the update policy to take a step.
+    updatePolicy.Update(iterate, stepSize, gradient);
 
     // Now add that to the overall objective function.
     if (shuffle)
+    {
       overallObjective += function.Evaluate(iterate,
           visitationOrder[currentFunction]);
+    }
     else
+    {
       overallObjective += function.Evaluate(iterate, currentFunction);
+    }
   }
 
   Log::Info << "SGD: maximum iterations (" << maxIterations << ") reached; "
       << "terminating optimization." << std::endl;
+
   // Calculate final objective.
   overallObjective = 0;
   for (size_t i = 0; i < numFunctions; ++i)
@@ -109,22 +132,7 @@ double SGD<DecomposableFunctionType>::Optimize(arma::mat& iterate)
   return overallObjective;
 }
 
-// Convert the object to a string.
-template<typename DecomposableFunctionType>
-std::string SGD<DecomposableFunctionType>::ToString() const
-{
-  std::ostringstream convert;
-  convert << "SGD [" << this << "]" << std::endl;
-  convert << "  Function:" << std::endl;
-  convert << util::Indent(function.ToString(), 2);
-  convert << "  Step size: " << stepSize << std::endl;
-  convert << "  Maximum iterations: " << maxIterations << std::endl;
-  convert << "  Tolerance: " << tolerance << std::endl;
-  convert << "  Shuffle points: " << (shuffle ? "true" : "false") << std::endl;
-  return convert.str();
-}
-
-}; // namespace optimization
-}; // namespace mlpack
+} // namespace optimization
+} // namespace mlpack
 
 #endif

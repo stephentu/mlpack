@@ -1,11 +1,20 @@
 /**
- * @file dual_tree_kmeans_rules.hpp
+ * @file dtnn_rules.hpp
  * @author Ryan Curtin
  *
- * A set of tree traversal rules for dual-tree k-means clustering.
+ * A set of rules for the dual-tree k-means algorithm which uses dual-tree
+ * nearest neighbor search.  For the most part we'll call out to
+ * NeighborSearchRules when we can.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_KMEANS_DUAL_TREE_KMEANS_RULES_HPP
-#define __MLPACK_METHODS_KMEANS_DUAL_TREE_KMEANS_RULES_HPP
+#ifndef MLPACK_METHODS_KMEANS_DUAL_TREE_KMEANS_RULES_HPP
+#define MLPACK_METHODS_KMEANS_DUAL_TREE_KMEANS_RULES_HPP
+
+#include <mlpack/core/tree/traversal_info.hpp>
 
 namespace mlpack {
 namespace kmeans {
@@ -14,65 +23,60 @@ template<typename MetricType, typename TreeType>
 class DualTreeKMeansRules
 {
  public:
-  DualTreeKMeansRules(const typename TreeType::Mat& dataset,
-                      const arma::mat& centroids,
-                      arma::mat& newCentroids,
-                      arma::Col<size_t>& counts,
-                      const std::vector<size_t>& mappings,
-                      const size_t iteration,
-                      const arma::vec& clusterDistances,
-                      arma::vec& distances,
-                      arma::Col<size_t>& assignments,
-                      arma::Col<size_t>& visited,
-                      arma::Col<size_t>& distanceIteration,
-                      arma::vec& hamerlyBounds,
-                      const arma::mat& interclusterDistances,
-                      MetricType& metric);
+  DualTreeKMeansRules(const arma::mat& centroids,
+                      const arma::mat& dataset,
+                      arma::Row<size_t>& assignments,
+                      arma::vec& upperBounds,
+                      arma::vec& lowerBounds,
+                      MetricType& metric,
+                      const std::vector<bool>& prunedPoints,
+                      const std::vector<size_t>& oldFromNewCentroids,
+                      std::vector<bool>& visited);
 
   double BaseCase(const size_t queryIndex, const size_t referenceIndex);
 
   double Score(const size_t queryIndex, TreeType& referenceNode);
-
   double Score(TreeType& queryNode, TreeType& referenceNode);
-
   double Rescore(const size_t queryIndex,
                  TreeType& referenceNode,
-                 const double oldScore) const;
-
+                 const double oldScore);
   double Rescore(TreeType& queryNode,
                  TreeType& referenceNode,
-                 const double oldScore) const;
+                 const double oldScore);
 
-  size_t DistanceCalculations() const { return distanceCalculations; }
-  size_t& DistanceCalculations() { return distanceCalculations; }
+  typedef typename tree::TraversalInfo<TreeType> TraversalInfoType;
 
-  typedef neighbor::NeighborSearchTraversalInfo<TreeType> TraversalInfoType;
-
-  const TraversalInfoType& TraversalInfo() const { return traversalInfo; }
   TraversalInfoType& TraversalInfo() { return traversalInfo; }
+  const TraversalInfoType& TraversalInfo() const { return traversalInfo; }
+
+  size_t BaseCases() const { return baseCases; }
+  size_t& BaseCases() { return baseCases; }
+
+  size_t Scores() const { return scores; }
+  size_t& Scores() { return scores; }
 
  private:
-  const typename TreeType::Mat& dataset;
   const arma::mat& centroids;
-  arma::mat& newCentroids;
-  arma::Col<size_t>& counts;
-  const std::vector<size_t>& mappings;
-  const size_t iteration;
-  const arma::vec& clusterDistances;
-  arma::vec& distances;
-  arma::Col<size_t>& assignments;
-  arma::Col<size_t>& visited;
-  arma::Col<size_t>& distanceIteration;
-  arma::vec& hamerlyBounds;
-  const arma::mat& interclusterDistances;
+  const arma::mat& dataset;
+  arma::Row<size_t>& assignments;
+  arma::vec& upperBounds;
+  arma::vec& lowerBounds;
   MetricType& metric;
 
-  size_t distanceCalculations;
+  const std::vector<bool>& prunedPoints;
+
+  const std::vector<size_t>& oldFromNewCentroids;
+
+  std::vector<bool>& visited;
+
+  size_t baseCases;
+  size_t scores;
 
   TraversalInfoType traversalInfo;
 
-  bool IsDescendantOf(const TreeType& potentialParent, const TreeType&
-      potentialChild) const;
+  size_t lastQueryIndex;
+  size_t lastReferenceIndex;
+  size_t lastBaseCase;
 };
 
 } // namespace kmeans

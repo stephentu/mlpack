@@ -3,9 +3,14 @@
  * @author Ryan Curtin
  *
  * Implementation of FastMKSRules for cover tree search.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_METHODS_FASTMKS_FASTMKS_RULES_IMPL_HPP
-#define __MLPACK_METHODS_FASTMKS_FASTMKS_RULES_IMPL_HPP
+#ifndef MLPACK_METHODS_FASTMKS_FASTMKS_RULES_IMPL_HPP
+#define MLPACK_METHODS_FASTMKS_FASTMKS_RULES_IMPL_HPP
 
 // In case it hasn't already been included.
 #include "fastmks_rules.hpp"
@@ -14,15 +19,14 @@ namespace mlpack {
 namespace fastmks {
 
 template<typename KernelType, typename TreeType>
-FastMKSRules<KernelType, TreeType>::FastMKSRules(const arma::mat& referenceSet,
-                                                 const arma::mat& querySet,
-                                                 arma::Mat<size_t>& indices,
-                                                 arma::mat& products,
-                                                 KernelType& kernel) :
+FastMKSRules<KernelType, TreeType>::FastMKSRules(
+    const typename TreeType::Mat& referenceSet,
+    const typename TreeType::Mat& querySet,
+    const size_t k,
+    KernelType& kernel) :
     referenceSet(referenceSet),
     querySet(querySet),
-    indices(indices),
-    products(products),
+    k(k),
     kernel(kernel),
     lastQueryIndex(-1),
     lastReferenceIndex(-1),
@@ -33,18 +37,51 @@ FastMKSRules<KernelType, TreeType>::FastMKSRules(const arma::mat& referenceSet,
   // Precompute each self-kernel.
   queryKernels.set_size(querySet.n_cols);
   for (size_t i = 0; i < querySet.n_cols; ++i)
-    queryKernels[i] = sqrt(kernel.Evaluate(querySet.unsafe_col(i),
-                                           querySet.unsafe_col(i)));
+    queryKernels[i] = sqrt(kernel.Evaluate(querySet.col(i),
+                                           querySet.col(i)));
 
   referenceKernels.set_size(referenceSet.n_cols);
   for (size_t i = 0; i < referenceSet.n_cols; ++i)
-    referenceKernels[i] = sqrt(kernel.Evaluate(referenceSet.unsafe_col(i),
-                                               referenceSet.unsafe_col(i)));
+    referenceKernels[i] = sqrt(kernel.Evaluate(referenceSet.col(i),
+                                               referenceSet.col(i)));
 
   // Set to invalid memory, so that the first node combination does not try to
   // dereference null pointers.
   traversalInfo.LastQueryNode() = (TreeType*) this;
   traversalInfo.LastReferenceNode() = (TreeType*) this;
+
+  // Let's build the list of candidate points for each query point.
+  // It will be initialized with k candidates: (-DBL_MAX, size_t() - 1)
+  // The list of candidates will be updated when visiting new points with the
+  // BaseCase() method.
+  const Candidate def = std::make_pair(-DBL_MAX, size_t() - 1);
+
+  CandidateList pqueue;
+  pqueue.reserve(k);
+  for (size_t i = 0; i < k; i++)
+    pqueue.push(def);
+  std::vector<CandidateList> tmp(querySet.n_cols, pqueue);
+  candidates.swap(tmp);
+}
+
+template<typename KernelType, typename TreeType>
+void FastMKSRules<KernelType, TreeType>::GetResults(
+    arma::Mat<size_t>& indices,
+    arma::mat& products)
+{
+  indices.set_size(k, querySet.n_cols);
+  products.set_size(k, querySet.n_cols);
+
+  for (size_t i = 0; i < querySet.n_cols; i++)
+  {
+    CandidateList& pqueue = candidates[i];
+    for (size_t j = 1; j <= k; j++)
+    {
+      indices(k - j, i) = pqueue.top().second;
+      products(k - j, i) = pqueue.top().first;
+      pqueue.pop();
+    }
+  }
 }
 
 template<typename KernelType, typename TreeType>
@@ -69,8 +106,8 @@ double FastMKSRules<KernelType, TreeType>::BaseCase(
   }
 
   ++baseCases;
-  double kernelEval = kernel.Evaluate(querySet.unsafe_col(queryIndex),
-                                      referenceSet.unsafe_col(referenceIndex));
+  double kernelEval = kernel.Evaluate(querySet.col(queryIndex),
+                                      referenceSet.col(referenceIndex));
 
   // Update the last kernel value, if we need to.
   if (tree::TreeTraits<TreeType>::FirstPointIsCentroid)
@@ -82,16 +119,7 @@ double FastMKSRules<KernelType, TreeType>::BaseCase(
   if ((&querySet == &referenceSet) && (queryIndex == referenceIndex))
     return kernelEval;
 
-  // If this is a better candidate, insert it into the list.
-  if (kernelEval < products(products.n_rows - 1, queryIndex))
-    return kernelEval;
-
-  size_t insertPosition = 0;
-  for ( ; insertPosition < products.n_rows; ++insertPosition)
-    if (kernelEval >= products(insertPosition, queryIndex))
-      break;
-
-  InsertNeighbor(queryIndex, insertPosition, referenceIndex, kernelEval);
+  InsertNeighbor(queryIndex, referenceIndex, kernelEval);
 
   return kernelEval;
 }
@@ -101,7 +129,7 @@ double FastMKSRules<KernelType, TreeType>::Score(const size_t queryIndex,
                                                  TreeType& referenceNode)
 {
   // Compare with the current best.
-  const double bestKernel = products(products.n_rows - 1, queryIndex);
+  const double bestKernel = candidates[queryIndex].top().first;
 
   // See if we can perform a parent-child prune.
   const double furthestDist = referenceNode.FurthestDescendantDistance();
@@ -156,11 +184,10 @@ double FastMKSRules<KernelType, TreeType>::Score(const size_t queryIndex,
   }
   else
   {
-    const arma::vec queryPoint = querySet.unsafe_col(queryIndex);
-    arma::vec refCentroid;
-    referenceNode.Centroid(refCentroid);
+    arma::vec refCenter;
+    referenceNode.Center(refCenter);
 
-    kernelEval = kernel.Evaluate(queryPoint, refCentroid);
+    kernelEval = kernel.Evaluate(querySet.col(queryIndex), refCenter);
   }
 
   referenceNode.Stat().LastKernel() = kernelEval;
@@ -188,7 +215,7 @@ double FastMKSRules<KernelType, TreeType>::Score(const size_t queryIndex,
 
   // We return the inverse of the maximum kernel so that larger kernels are
   // recursed into first.
-  return (maxKernel > bestKernel) ? (1.0 / maxKernel) : DBL_MAX;
+  return (maxKernel >= bestKernel) ? (1.0 / maxKernel) : DBL_MAX;
 }
 
 template<typename KernelType, typename TreeType>
@@ -325,12 +352,12 @@ double FastMKSRules<KernelType, TreeType>::Score(TreeType& queryNode,
   else
   {
     // Calculate the maximum possible kernel value.
-    arma::vec queryCentroid;
-    arma::vec refCentroid;
-    queryNode.Centroid(queryCentroid);
-    referenceNode.Centroid(refCentroid);
+    arma::vec queryCenter;
+    arma::vec refCenter;
+    queryNode.Center(queryCenter);
+    referenceNode.Center(refCenter);
 
-    kernelEval = kernel.Evaluate(queryCentroid, refCentroid);
+    kernelEval = kernel.Evaluate(queryCenter, refCenter);
 
     traversalInfo.LastBaseCase() = kernelEval;
   }
@@ -377,7 +404,7 @@ double FastMKSRules<KernelType, TreeType>::Score(TreeType& queryNode,
 
   // We return the inverse of the maximum kernel so that larger kernels are
   // recursed into first.
-  return (maxKernel > bestKernel) ? (1.0 / maxKernel) : DBL_MAX;
+  return (maxKernel >= bestKernel) ? (1.0 / maxKernel) : DBL_MAX;
 }
 
 template<typename KernelType, typename TreeType>
@@ -385,9 +412,9 @@ double FastMKSRules<KernelType, TreeType>::Rescore(const size_t queryIndex,
                                                    TreeType& /*referenceNode*/,
                                                    const double oldScore) const
 {
-  const double bestKernel = products(products.n_rows - 1, queryIndex);
+  const double bestKernel = candidates[queryIndex].top().first;
 
-  return ((1.0 / oldScore) > bestKernel) ? oldScore : DBL_MAX;
+  return ((1.0 / oldScore) >= bestKernel) ? oldScore : DBL_MAX;
 }
 
 template<typename KernelType, typename TreeType>
@@ -398,7 +425,7 @@ double FastMKSRules<KernelType, TreeType>::Rescore(TreeType& queryNode,
   queryNode.Stat().Bound() = CalculateBound(queryNode);
   const double bestKernel = queryNode.Stat().Bound();
 
-  return ((1.0 / oldScore) > bestKernel) ? oldScore : DBL_MAX;
+  return ((1.0 / oldScore) >= bestKernel) ? oldScore : DBL_MAX;
 }
 
 /**
@@ -426,24 +453,42 @@ double FastMKSRules<KernelType, TreeType>::CalculateBound(TreeType& queryNode)
 
   const double queryDescendantDistance = queryNode.FurthestDescendantDistance();
 
-  // Loop over all points in this node to find the best and worst.
+  // Loop over all points in this node to find the worst max-kernel value and
+  // the best possible adjusted max-kernel value that could be held by any
+  // descendant.
   for (size_t i = 0; i < queryNode.NumPoints(); ++i)
   {
     const size_t point = queryNode.Point(i);
-    if (products(products.n_rows - 1, point) < worstPointKernel)
-      worstPointKernel = products(products.n_rows - 1, point);
+    const CandidateList& candidatesPoints = candidates[point];
+    if (candidatesPoints.top().first < worstPointKernel)
+      worstPointKernel = candidatesPoints.top().first;
 
-    if (products(products.n_rows - 1, point) == -DBL_MAX)
+    if (candidatesPoints.top().first == -DBL_MAX)
       continue; // Avoid underflow.
 
     // This should be (queryDescendantDistance + centroidDistance) for any tree
     // but it works for cover trees since centroidDistance = 0 for cover trees.
-    const double candidateKernel = products(products.n_rows - 1, point) -
-        queryDescendantDistance *
-        referenceKernels[indices(indices.n_rows - 1, point)];
+    // The formulation here is slightly different than in Equation 43 of
+    // "Dual-tree fast exact max-kernel search".  Because we could be searching
+    // for k max kernels and not just one, the bound for this point must
+    // actually be the minimum adjusted kernel of all k candidate kernels.
+    // So,
+    //   B(N_q) = min_{1 \le j \le k} k_j^*(p_q) -
+    //       \lambda_q \sqrt(K(p_j^*(p_q), p_j^*(p_q)))
+    // where p_j^*(p_q) is the j'th kernel candidate for query point p_q and
+    // k_j^*(p_q) is K(p_q, p_j^*(p_q)).
+    double worstPointCandidateKernel = DBL_MAX;
+    typedef typename CandidateList::const_iterator iter;
+    for (iter it = candidatesPoints.begin(); it != candidatesPoints.end(); ++it)
+    {
+      const double candidateKernel = it->first - queryDescendantDistance *
+          referenceKernels[it->second];
+      if (candidateKernel < worstPointCandidateKernel)
+        worstPointCandidateKernel = candidateKernel;
+    }
 
-    if (candidateKernel > bestAdjustedPointKernel)
-      bestAdjustedPointKernel = candidateKernel;
+    if (worstPointCandidateKernel > bestAdjustedPointKernel)
+      bestAdjustedPointKernel = worstPointCandidateKernel;
   }
 
   // Loop over all the children in the node.
@@ -466,44 +511,34 @@ double FastMKSRules<KernelType, TreeType>::CalculateBound(TreeType& queryNode)
   // Pick the best of these bounds.
   const double interA = (firstBound > bestAdjustedPointKernel) ? firstBound :
       bestAdjustedPointKernel;
-//  const double interA = 0.0;
   const double interB = fourthBound;
 
   return (interA > interB) ? interA : interB;
 }
 
 /**
- * Helper function to insert a point into the neighbors and distances matrices.
+ * Helper function to insert a point into the list of candidate points.
  *
  * @param queryIndex Index of point whose neighbors we are inserting into.
- * @param pos Position in list to insert into.
- * @param neighbor Index of reference point which is being inserted.
- * @param distance Distance from query point to reference point.
+ * @param index Index of reference point which is being inserted.
+ * @param product Kernel value for given candidate.
  */
 template<typename KernelType, typename TreeType>
-void FastMKSRules<KernelType, TreeType>::InsertNeighbor(const size_t queryIndex,
-                                                        const size_t pos,
-                                                        const size_t neighbor,
-                                                        const double distance)
+inline void FastMKSRules<KernelType, TreeType>::InsertNeighbor(
+    const size_t queryIndex,
+    const size_t index,
+    const double product)
 {
-  // We only memmove() if there is actually a need to shift something.
-  if (pos < (products.n_rows - 1))
+  CandidateList& pqueue = candidates[queryIndex];
+  if (product > pqueue.top().first)
   {
-    int len = (products.n_rows - 1) - pos;
-    memmove(products.colptr(queryIndex) + (pos + 1),
-        products.colptr(queryIndex) + pos,
-        sizeof(double) * len);
-    memmove(indices.colptr(queryIndex) + (pos + 1),
-        indices.colptr(queryIndex) + pos,
-        sizeof(size_t) * len);
+    Candidate c = std::make_pair(product, index);
+    pqueue.pop();
+    pqueue.push(c);
   }
-
-  // Now put the new information in the right index.
-  products(pos, queryIndex) = distance;
-  indices(pos, queryIndex) = neighbor;
 }
 
-}; // namespace fastmks
-}; // namespace mlpack
+} // namespace fastmks
+} // namespace mlpack
 
 #endif

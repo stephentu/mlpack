@@ -3,11 +3,16 @@
  * @author Ryan Curtin
  *
  * The Mahalanobis distance.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#ifndef __MLPACK_CORE_METRICS_MAHALANOBIS_DISTANCE_HPP
-#define __MLPACK_CORE_METRICS_MAHALANOBIS_DISTANCE_HPP
+#ifndef MLPACK_CORE_METRICS_MAHALANOBIS_DISTANCE_HPP
+#define MLPACK_CORE_METRICS_MAHALANOBIS_DISTANCE_HPP
 
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
 
 namespace mlpack {
 namespace metric {
@@ -80,11 +85,8 @@ class MahalanobisDistance
    * @param a First vector.
    * @param b Second vector.
    */
-
-  // Return String of Object
-  std::string ToString() const;
-  template<typename VecType1, typename VecType2>
-  double Evaluate(const VecType1& a, const VecType2& b);
+  template<typename VecTypeA, typename VecTypeB>
+  double Evaluate(const VecTypeA& a, const VecTypeB& b);
 
   /**
    * Access the covariance matrix.
@@ -99,13 +101,18 @@ class MahalanobisDistance
    * @return Reference to the covariance matrix.
    */
   arma::mat& Covariance() { return covariance; }
+
+  //! Serialize the Mahalanobis distance.
+  template<typename Archive>
+  void Serialize(Archive& ar, const unsigned int version);
+
  private:
   //! The covariance matrix associated with this distance.
   arma::mat covariance;
 };
 
-}; // namespace distance
-}; // namespace mlpack
+} // namespace metric
+} // namespace mlpack
 
 #include "mahalanobis_distance_impl.hpp"
 

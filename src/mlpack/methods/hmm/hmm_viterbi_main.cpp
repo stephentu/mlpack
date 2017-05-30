@@ -4,24 +4,19 @@
  *
  * Compute the most probably hidden state sequence of a given observation
  * sequence for a given HMM.
+ *
+ * mlpack is free software; you may redistribute it and/or modify it under the
+ * terms of the 3-clause BSD license.  You should have received a copy of the
+ * 3-clause BSD license along with mlpack.  If not, see
+ * http://www.opensource.org/licenses/BSD-3-Clause for more information.
  */
-#include <mlpack/core.hpp>
+#include <mlpack/prereqs.hpp>
+#include <mlpack/core/util/cli.hpp>
 
 #include "hmm.hpp"
-#include "hmm_util.hpp"
+#include "hmm_model.hpp"
 
 #include <mlpack/methods/gmm/gmm.hpp>
-
-PROGRAM_INFO("Hidden Markov Model (HMM) Viterbi State Prediction", "This "
-    "utility takes an already-trained HMM (--model_file) and evaluates the "
-    "most probably hidden state sequence of a given sequence of observations "
-    "(--input_file), using the Viterbi algorithm.  The computed state sequence "
-    "is saved to the specified output file (--output_file).");
-
-PARAM_STRING_REQ("input_file", "File containing observations,", "i");
-PARAM_STRING_REQ("model_file", "File containing HMM (XML).", "m");
-PARAM_STRING("output_file", "File to save predicted state sequence to.", "o",
-    "output.csv");
 
 using namespace mlpack;
 using namespace mlpack::hmm;
@@ -31,60 +26,33 @@ using namespace mlpack::gmm;
 using namespace arma;
 using namespace std;
 
-int main(int argc, char** argv)
+PROGRAM_INFO("Hidden Markov Model (HMM) Viterbi State Prediction", "This "
+    "utility takes an already-trained HMM (--model_file) and evaluates the "
+    "most probably hidden state sequence of a given sequence of observations "
+    "(--input_file), using the Viterbi algorithm.  The computed state sequence "
+    "is saved to the specified output file (--output_file).");
+
+PARAM_MATRIX_IN_REQ("input", "Matrix containing observations,", "i");
+PARAM_MODEL_IN_REQ(HMMModel, "input_model", "Trained HMM to use.", "m");
+PARAM_UMATRIX_OUT("output", "File to save predicted state sequence to.", "o");
+
+// Because we don't know what the type of our HMM is, we need to write a
+// function that can take arbitrary HMM types.
+struct Viterbi
 {
-  // Parse command line options.
-  CLI::ParseCommandLine(argc, argv);
-
-  // Load observations.
-  const string inputFile = CLI::GetParam<string>("input_file");
-  const string modelFile = CLI::GetParam<string>("model_file");
-
-  mat dataSeq;
-  data::Load(inputFile, dataSeq, true);
-
-  // Load model, but first we have to determine its type.
-  SaveRestoreUtility sr;
-  sr.ReadFile(modelFile);
-  string type;
-  sr.LoadParameter(type, "hmm_type");
-
-  arma::Col<size_t> sequence;
-  if (type == "discrete")
+  template<typename HMMType>
+  static void Apply(HMMType& hmm, void* /* extraInfo */)
   {
-    HMM<DiscreteDistribution> hmm(1, DiscreteDistribution(1));
+    // Load observations.
+    mat dataSeq = std::move(CLI::GetParam<arma::mat>("input"));
 
-    LoadHMM(hmm, sr);
-
-    // Verify only one row in observations.
-    if (dataSeq.n_cols == 1)
-      dataSeq = trans(dataSeq);
-
-    if (dataSeq.n_rows > 1)
-      Log::Fatal << "Only one-dimensional discrete observations allowed for "
-          << "discrete HMMs!" << endl;
-
-    hmm.Predict(dataSeq, sequence);
-  }
-  else if (type == "gaussian")
-  {
-    HMM<GaussianDistribution> hmm(1, GaussianDistribution(1));
-
-    LoadHMM(hmm, sr);
-
-    // Verify correct dimensionality.
-    if (dataSeq.n_rows != hmm.Emission()[0].Mean().n_elem)
-      Log::Fatal << "Observation dimensionality (" << dataSeq.n_rows << ") "
-          << "does not match HMM Gaussian dimensionality ("
-          << hmm.Emission()[0].Mean().n_elem << ")!" << endl;
-
-    hmm.Predict(dataSeq, sequence);
-  }
-  else if (type == "gmm")
-  {
-    HMM<GMM<> > hmm(1, GMM<>(1, 1));
-
-    LoadHMM(hmm, sr);
+    // See if transposing the data could make it the right dimensionality.
+    if ((dataSeq.n_cols == 1) && (hmm.Emission()[0].Dimensionality() == 1))
+    {
+      Log::Info << "Data sequence appears to be transposed; correcting."
+          << endl;
+      dataSeq = dataSeq.t();
+    }
 
     // Verify correct dimensionality.
     if (dataSeq.n_rows != hmm.Emission()[0].Dimensionality())
@@ -92,15 +60,23 @@ int main(int argc, char** argv)
           << "does not match HMM Gaussian dimensionality ("
           << hmm.Emission()[0].Dimensionality() << ")!" << endl;
 
+    arma::Row<size_t> sequence;
     hmm.Predict(dataSeq, sequence);
-  }
-  else
-  {
-    Log::Fatal << "Unknown HMM type '" << type << "' in file '" << modelFile
-        << "'!" << endl;
-  }
 
-  // Save output.
-  const string outputFile = CLI::GetParam<string>("output_file");
-  data::Save(outputFile, sequence, true);
+    // Save output.
+    if (CLI::HasParam("output"))
+      CLI::GetParam<arma::Mat<size_t>>("output") = std::move(sequence);
+  }
+};
+
+int main(int argc, char** argv)
+{
+  // Parse command line options.
+  CLI::ParseCommandLine(argc, argv);
+
+  if (!CLI::HasParam("output"))
+    Log::Warn << "--output_file (-o) is not specified; no results will be "
+        << "saved!" << endl;
+
+  CLI::GetParam<HMMModel>("input_model").PerformAction<Viterbi>((void*) NULL);
 }
